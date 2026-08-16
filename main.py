@@ -1453,4 +1453,4 @@ asyncio.run(ensure_housing_tables())
 asyncio.run(ensure_location_tables())
 asyncio.run(ensure_inventory_tables())
 
-bot.run_forever()
+bot.run()
