@@ -72,18 +72,44 @@ from systems.media import stabilize_attachments
 
 load_dotenv()
 
-# Локально используется VK_TOKEN из .env. На хостингах токен часто
-# передаётся как BOT_TOKEN, поэтому поддерживаем оба варианта.
-TOKEN = (
-    os.getenv("VK_TOKEN")
-    or os.getenv("BOT_TOKEN")
-    or os.getenv("VK_BOT_TOKEN")
-    or os.getenv("API_TOKEN")
+# Токен VK. На разных хостингах он может приходить под разными именами.
+# Некоторые панели сохраняют значение в виде "VK_TOKEN=vk1.a...", поэтому
+# перед передачей в VKBottle нормализуем строку.
+def _normalize_vk_token(value: str | None) -> str:
+    if not value:
+        return ""
+    value = value.strip().strip('"').strip("'")
+    # Убираем ошибочно добавленное имя переменной из значения.
+    for prefix in ("VK_TOKEN=", "BOT_TOKEN=", "VK_BOT_TOKEN=", "API_TOKEN=", "TOKEN="):
+        if value.startswith(prefix):
+            value = value[len(prefix):].strip()
+            break
+    return value
+
+_token_sources = (
+    ("VK_TOKEN", os.getenv("VK_TOKEN")),
+    ("BOT_TOKEN", os.getenv("BOT_TOKEN")),
+    ("VK_BOT_TOKEN", os.getenv("VK_BOT_TOKEN")),
+    ("TOKEN", os.getenv("TOKEN")),
+    ("API_TOKEN", os.getenv("API_TOKEN")),
 )
+
+TOKEN = ""
+TOKEN_SOURCE = ""
+for _name, _value in _token_sources:
+    _candidate = _normalize_vk_token(_value)
+    if _candidate:
+        TOKEN = _candidate
+        TOKEN_SOURCE = _name
+        break
+
 if not TOKEN:
     raise RuntimeError(
-        "Не найден токен VK. Укажите VK_TOKEN или BOT_TOKEN в переменных окружения."
+        "Не найден токен VK. Укажите VK_TOKEN, BOT_TOKEN или TOKEN в переменных окружения."
     )
+
+# В лог выводится только источник, сам секрет никогда не печатается.
+print(f"[config] VK token source: {TOKEN_SOURCE}")
 
 # Текущий административный чат проекта. Значение можно переопределить
 # переменной ADMIN_CHAT_ID на хостинге.
