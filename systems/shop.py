@@ -11,8 +11,8 @@ SHOP_CATEGORIES = {
 
 def load_shop_items():
     paths = [
-        Path(__file__).resolve().parent.parent / "data" / "shop_items.json",
         Path(__file__).resolve().parent.parent / "shop_items.json",
+        Path(__file__).resolve().parent.parent / "data" / "shop_items.json",
         Path("data") / "shop_items.json",
         Path("shop_items.json"),
     ]

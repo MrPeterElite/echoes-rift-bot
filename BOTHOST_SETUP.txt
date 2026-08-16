@@ -1,3 +1,17 @@
-VK_TOKEN=YOUR_COMMUNITY_TOKEN
-ADMIN_CHAT_ID=2000000001
-# Bothost can use BOT_TOKEN instead of VK_TOKEN.
+ECHOES RIFT — настройка Bothost
+
+1. Главный файл: main.py
+2. Python: 3.11
+3. Токен: можно передать как BOT_TOKEN или VK_TOKEN.
+4. ADMIN_CHAT_ID по умолчанию: 2000000001. При необходимости переопределяется переменной ADMIN_CHAT_ID.
+5. База данных:
+   - локально используется database.db в корне;
+   - на Bothost автоматически используется /app/data/database.db;
+   - при первом запуске существующая database.db копируется туда;
+   - при следующих деплоях постоянная база не перезаписывается.
+6. Изображения магазина лежат в корне репозитория:
+   food/
+   medicine/
+   tools/
+7. .env в GitHub не загружать.
+8. requirements.txt должен лежать в корне.

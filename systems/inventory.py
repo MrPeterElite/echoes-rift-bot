@@ -12,8 +12,8 @@ CATEGORIES = {
 
 def load_item_catalog():
     paths = [
-        Path(__file__).resolve().parent.parent / "data" / "shop_items.json",
         Path(__file__).resolve().parent.parent / "shop_items.json",
+        Path(__file__).resolve().parent.parent / "data" / "shop_items.json",
     ]
     for path in paths:
         if path.exists():

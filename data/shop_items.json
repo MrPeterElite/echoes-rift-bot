@@ -18,7 +18,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/01_dry_ration.png"
+        "local_image": "food/01_dry_ration.png"
       },
       {
         "code": "water_bottle",
@@ -36,7 +36,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/02_water.png"
+        "local_image": "food/02_water.png"
       },
       {
         "code": "synth_coffee",
@@ -54,7 +54,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/03_synth_coffee.png"
+        "local_image": "food/03_synth_coffee.png"
       },
       {
         "code": "protein_bar",
@@ -72,7 +72,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/04_protein_bar.png"
+        "local_image": "food/04_protein_bar.png"
       },
       {
         "code": "station_meal",
@@ -90,7 +90,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/05_hot_meal.png"
+        "local_image": "food/05_hot_meal.png"
       },
       {
         "code": "instant_noodles",
@@ -108,7 +108,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/06_noodles.png"
+        "local_image": "food/06_noodles.png"
       },
       {
         "code": "nut_mix",
@@ -126,7 +126,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/07_nut_mix.png"
+        "local_image": "food/07_nut_mix.png"
       },
       {
         "code": "energy_drink",
@@ -144,7 +144,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/08_energy_drink.png"
+        "local_image": "food/08_energy_drink.png"
       },
       {
         "code": "vacuum_sandwich",
@@ -162,7 +162,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/09_vacuum_sandwich.png"
+        "local_image": "food/09_vacuum_sandwich.png"
       },
       {
         "code": "colony_tea",
@@ -180,7 +180,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/10_colonial_tea.png"
+        "local_image": "food/10_colonial_tea.png"
       },
       {
         "code": "colony_fruits",
@@ -198,7 +198,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/11_colony_fruits.png"
+        "local_image": "food/11_colony_fruits.png"
       },
       {
         "code": "colony_meat_pack",
@@ -216,7 +216,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/12_colony_meat.png"
+        "local_image": "food/12_colony_meat.png"
       },
       {
         "code": "ash_drink",
@@ -234,7 +234,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/13_ash_drink.png"
+        "local_image": "food/13_ash_drink.png"
       },
       {
         "code": "rift_concentrate",
@@ -252,7 +252,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/food/14_rift_concentrate.png"
+        "local_image": "food/14_rift_concentrate.png"
       }
     ]
   },
@@ -275,7 +275,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/medicine/01_bandage.png"
+        "local_image": "medicine/01_bandage.png"
       },
       {
         "code": "painkiller",
@@ -293,7 +293,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/medicine/02_painkiller.png"
+        "local_image": "medicine/02_painkiller.png"
       },
       {
         "code": "hemostatic",
@@ -311,7 +311,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/medicine/03_hemostatic.png"
+        "local_image": "medicine/03_hemostatic.png"
       },
       {
         "code": "stimulant",
@@ -346,7 +346,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/medicine/05_antirad.png"
+        "local_image": "medicine/05_antirad.png"
       },
       {
         "code": "adrenaline_autoinjector",
@@ -364,7 +364,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/medicine/06_adrenaline.png"
+        "local_image": "medicine/06_adrenaline.png"
       },
       {
         "code": "field_medkit",
@@ -382,7 +382,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/medicine/07_field_medkit.png"
+        "local_image": "medicine/07_field_medkit.png"
       },
       {
         "code": "phoenix_autoinjector",
@@ -401,7 +401,7 @@
         "usable": true,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/medicine/08_phoenix.png"
+        "local_image": "medicine/08_phoenix.png"
       }
     ]
   },
@@ -425,7 +425,7 @@
         "consumable": false,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/tools/01_universal_wrench.png"
+        "local_image": "tools/01_universal_wrench.png"
       },
       {
         "code": "industrial_flashlight",
@@ -444,7 +444,7 @@
         "consumable": false,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/tools/02_industrial_flashlight.png"
+        "local_image": "tools/02_industrial_flashlight.png"
       },
       {
         "code": "tool_set",
@@ -463,7 +463,7 @@
         "consumable": false,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/tools/03_toolkit.png"
+        "local_image": "tools/03_toolkit.png"
       },
       {
         "code": "plasma_cutter",
@@ -482,7 +482,7 @@
         "consumable": false,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/tools/04_plasma_cutter.png"
+        "local_image": "tools/04_plasma_cutter.png"
       },
       {
         "code": "portable_welder",
@@ -501,7 +501,7 @@
         "consumable": false,
         "transferable": true,
         "destroyable": true,
-        "local_image": "assets/shop/tools/05_welder.png"
+        "local_image": "tools/05_welder.png"
       }
     ]
   }

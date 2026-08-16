@@ -6,8 +6,8 @@ from pathlib import Path
 
 def load_quest_catalog():
     paths = [
-        Path(__file__).resolve().parent.parent / "data" / "quests.json",
         Path(__file__).resolve().parent.parent / "quests.json",
+        Path(__file__).resolve().parent.parent / "data" / "quests.json",
     ]
     for path in paths:
         if path.exists():
