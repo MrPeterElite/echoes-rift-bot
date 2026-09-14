@@ -509,12 +509,12 @@
     "title": "🪑 Интерьер каюты",
     "items": [
       {
-        "code": "standard_living_module",
-        "name": "Комплект «Стандартный жилой модуль»",
-        "price": 650,
+        "code": "basic_habitation",
+        "name": "Базовый жилой модуль",
+        "price": 600,
         "rarity": "⚪ Обычный",
         "category": "furniture",
-        "description": "Базовый жилой набор станции: компактная зона отдыха, встроенные системы хранения и нейтральная отделка. Занимает жилую зону каюты.",
+        "description": "Стандартный жилой комплект станции. Компактное спальное место, встроенные системы хранения и минимум необходимой мебели — ничего лишнего, только практичность и порядок.",
         "interior_set": true,
         "housing_slots": [
           "living"
@@ -523,171 +523,35 @@
         "usable": false,
         "consumable": false,
         "transferable": true,
-        "destroyable": true
+        "destroyable": true,
+        "local_image": "cabins/basic_habitation.png"
       },
       {
-        "code": "station_minimalism",
-        "name": "Комплект «Станционный минимализм»",
-        "price": 900,
-        "rarity": "⚪ Обычный",
-        "category": "furniture",
-        "description": "Лаконичная модульная мебель в станционном стиле: чистые линии, металлические панели и максимум практичности.",
-        "interior_set": true,
-        "housing_slots": [
-          "main"
-        ],
-        "min_housing_class": "V",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "warm_light_contour",
-        "name": "Комплект «Тёплый световой контур»",
-        "price": 550,
-        "rarity": "⚪ Обычный",
-        "category": "furniture",
-        "description": "Набор мягкого регулируемого освещения, делающий стандартный жилой модуль заметно уютнее.",
-        "interior_set": true,
-        "housing_slots": [
-          "lighting"
-        ],
-        "min_housing_class": "V",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "colonial_decor",
-        "name": "Комплект «Колониальный уют»",
-        "price": 800,
-        "rarity": "⚪ Обычный",
-        "category": "furniture",
-        "description": "Небольшой декоративный набор с растениями, текстилем и памятными элементами колониального быта.",
-        "interior_set": true,
-        "housing_slots": [
-          "decor"
-        ],
-        "min_housing_class": "V",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "service_workspace",
-        "name": "Комплект «Служебная рабочая зона»",
-        "price": 1200,
-        "rarity": "⚪ Обычный",
-        "category": "furniture",
-        "description": "Рабочий терминал, компактный стол и организационные модули для тех, кто часто продолжает работу после смены.",
-        "interior_set": true,
-        "housing_slots": [
-          "work"
-        ],
-        "min_housing_class": "V",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "neon_night",
-        "name": "Комплект «Неоновая ночь»",
-        "price": 1400,
-        "rarity": "🟢 Необычный",
-        "category": "furniture",
-        "description": "Контурное неоновое освещение с программируемыми сценариями яркости и цвета. Косметический интерьерный комплект.",
-        "interior_set": true,
-        "housing_slots": [
-          "lighting"
-        ],
-        "min_housing_class": "IV",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "expedition_gallery",
-        "name": "Комплект «Экспедиционная галерея»",
-        "price": 1800,
-        "rarity": "🟢 Необычный",
-        "category": "furniture",
-        "description": "Витрины, крепления и настенные панели для карт, фотографий, жетонов и безопасных трофеев из экспедиций.",
-        "interior_set": true,
-        "housing_slots": [
-          "decor"
-        ],
-        "min_housing_class": "IV",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "industrial_tech",
-        "name": "Комплект «Индустриальный техноконтур»",
-        "price": 3200,
-        "rarity": "🟢 Необычный",
-        "category": "furniture",
-        "description": "Тяжёлая модульная мебель, инструментальные панели и техническая рабочая зона. Занимает сразу основную и рабочую зоны.",
-        "interior_set": true,
-        "housing_slots": [
-          "main",
-          "work"
-        ],
-        "min_housing_class": "IV",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "helios_research",
-        "name": "Комплект «HELIOS Research»",
-        "price": 4800,
+        "code": "officer_quarters",
+        "name": "Офицерские покои",
+        "price": 6500,
         "rarity": "🔵 Редкий",
         "category": "furniture",
-        "description": "Исследовательский интерьер HELIOS Dynamics: аналитический терминал, холодное рабочее освещение и закрытые технологические модули.",
+        "description": "Сдержанный интерьер для тех, кто привык к порядку и положению. Улучшенная жилая зона, приватный уголок и качественные материалы подчёркивают статус владельца без показной роскоши.",
         "interior_set": true,
         "housing_slots": [
-          "work",
-          "lighting"
+          "living",
+          "personal"
         ],
         "min_housing_class": "III",
         "usable": false,
         "consumable": false,
         "transferable": true,
-        "destroyable": true
+        "destroyable": true,
+        "local_image": "cabins/officer_quarters.png"
       },
       {
-        "code": "officer_interior",
-        "name": "Комплект «Офицерский интерьер»",
-        "price": 5500,
-        "rarity": "🔵 Редкий",
+        "code": "luxury_suite",
+        "name": "Люкс-апартаменты",
+        "price": 14000,
+        "rarity": "🟣 Эпический",
         "category": "furniture",
-        "description": "Строгая представительская мебель и статусный декор для просторных жилых модулей. Занимает основную мебель и декор.",
-        "interior_set": true,
-        "housing_slots": [
-          "main",
-          "decor"
-        ],
-        "min_housing_class": "II",
-        "usable": false,
-        "consumable": false,
-        "transferable": true,
-        "destroyable": true
-      },
-      {
-        "code": "heliosphere_luxury",
-        "name": "Комплект «Гелиосфера»",
-        "price": 7500,
-        "rarity": "🟣 Элитный",
-        "category": "furniture",
-        "description": "Премиальный жилой интерьер с расширенной зоной отдыха и дорогой модульной мебелью. Занимает жилую и основную зоны.",
+        "description": "Просторный премиальный интерьер с отдельной зоной отдыха, дорогой мебелью и скрытыми системами хранения. Жильё для тех, кому стандартные условия станции давно стали тесны.",
         "interior_set": true,
         "housing_slots": [
           "living",
@@ -697,7 +561,239 @@
         "usable": false,
         "consumable": false,
         "transferable": true,
-        "destroyable": true
+        "destroyable": true,
+        "local_image": "cabins/luxury_suite.png"
+      },
+      {
+        "code": "botanical_oasis",
+        "name": "Ботанический оазис",
+        "price": 4800,
+        "rarity": "🔵 Редкий",
+        "category": "furniture",
+        "description": "Небольшой островок живой природы среди металла станции. Растения, мягкое оформление и зелёные композиции превращают каюту в редкое место, где действительно можно забыть о холоде космоса.",
+        "interior_set": true,
+        "housing_slots": [
+          "personal",
+          "decor"
+        ],
+        "min_housing_class": "III",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/botanical_oasis.png"
+      },
+      {
+        "code": "old_earth",
+        "name": "Старая Земля",
+        "price": 5500,
+        "rarity": "🔵 Редкий",
+        "category": "furniture",
+        "description": "Интерьер, вдохновлённый давно ушедшим земным бытом. Книги, тёплые материалы и старомодные предметы создают ощущение дома, которого, возможно, уже не существует.",
+        "interior_set": true,
+        "housing_slots": [
+          "personal",
+          "decor"
+        ],
+        "min_housing_class": "III",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/old_earth.png"
+      },
+      {
+        "code": "space_nomad",
+        "name": "Космический кочевник",
+        "price": 2700,
+        "rarity": "🟢 Необычный",
+        "category": "furniture",
+        "description": "Жильё человека, который привык постоянно быть в пути. Складные элементы, дорожные контейнеры и личные находки делают каюту похожей на временный дом между очередными экспедициями.",
+        "interior_set": true,
+        "housing_slots": [
+          "living",
+          "personal"
+        ],
+        "min_housing_class": "IV",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/space_nomad.png"
+      },
+      {
+        "code": "corporate_comfort",
+        "name": "Корпоративный комфорт",
+        "price": 6200,
+        "rarity": "🔵 Редкий",
+        "category": "furniture",
+        "description": "Выверенный до мелочей современный интерьер: встроенная мебель, скрытые системы хранения и безупречно чистые линии. Дорого, удобно и немного безлично — именно так корпорации представляют идеальный комфорт.",
+        "interior_set": true,
+        "housing_slots": [
+          "main",
+          "lighting"
+        ],
+        "min_housing_class": "III",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/corporate_comfort.png"
+      },
+      {
+        "code": "service_furniture",
+        "name": "Служебный мебельный комплект",
+        "price": 950,
+        "rarity": "⚪ Обычный",
+        "category": "furniture",
+        "description": "Надёжный комплект серийной станционной мебели. Стол, места для хранения и простая зона отдыха заметно повышают удобство каюты без претензий на роскошь.",
+        "interior_set": true,
+        "housing_slots": [
+          "main"
+        ],
+        "min_housing_class": "V",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/service_furniture.png"
+      },
+      {
+        "code": "representative_lounge",
+        "name": "Представительский салон",
+        "price": 10500,
+        "rarity": "🟣 Эпический",
+        "category": "furniture",
+        "description": "Интерьер для тех, кто привык принимать гостей и вести серьёзные разговоры в собственной каюте. Мягкая мебель, просторная зона общения и подчёркнуто дорогая отделка говорят о влиянии владельца раньше него самого.",
+        "interior_set": true,
+        "housing_slots": [
+          "main",
+          "personal"
+        ],
+        "min_housing_class": "II",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/representative_lounge.png"
+      },
+      {
+        "code": "cold_neon",
+        "name": "Холодный неон",
+        "price": 1600,
+        "rarity": "🟢 Необычный",
+        "category": "furniture",
+        "description": "Холодные световые линии, глубокие тени и подчёркнуто технологичная атмосфера. Комплект полностью меняет восприятие помещения, превращая обычную каюту в строгий футуристический интерьер.",
+        "interior_set": true,
+        "housing_slots": [
+          "lighting"
+        ],
+        "min_housing_class": "IV",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/cold_neon.png"
+      },
+      {
+        "code": "warm_comfort",
+        "name": "Тёплый комфорт",
+        "price": 800,
+        "rarity": "⚪ Обычный",
+        "category": "furniture",
+        "description": "Мягкое тёплое освещение для тех, кому стандартный свет станции кажется слишком холодным. Простое изменение атмосферы, способное сделать даже небольшую каюту значительно уютнее.",
+        "interior_set": true,
+        "housing_slots": [
+          "lighting"
+        ],
+        "min_housing_class": "V",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/warm_comfort.png"
+      },
+      {
+        "code": "industrial_interior",
+        "name": "Индустриальный интерьер",
+        "price": 5000,
+        "rarity": "🔵 Редкий",
+        "category": "furniture",
+        "description": "Грубый металл, открытые конструкционные элементы и массивная мебель создают намеренно суровый жилой стиль. Для тех, кому отполированный станционный пластик кажется слишком стерильным.",
+        "interior_set": true,
+        "housing_slots": [
+          "main",
+          "lighting"
+        ],
+        "min_housing_class": "III",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/industrial_interior.png"
+      },
+      {
+        "code": "expedition_veteran",
+        "name": "Экспедиционный ветеран",
+        "price": 0,
+        "rarity": "🟡 Легендарный",
+        "category": "furniture",
+        "description": "Личная коллекция воспоминаний о дальних маршрутах: карты, трофеи, образцы и вещи, пережившие опасные экспедиции вместе с владельцем. Такой интерьер нельзя просто купить — его нужно заслужить.",
+        "interior_set": true,
+        "housing_slots": [
+          "personal",
+          "decor"
+        ],
+        "min_housing_class": "III",
+        "usable": false,
+        "consumable": false,
+        "transferable": false,
+        "destroyable": true,
+        "local_image": "cabins/expedition_veteran.png",
+        "purchasable": false,
+        "acquisition": "Награда за крупные экспедиции и события"
+      },
+      {
+        "code": "directorate_interior",
+        "name": "Интерьер Директории",
+        "price": 8500,
+        "rarity": "🟣 Эпический",
+        "category": "furniture",
+        "description": "Строгий, выверенный интерьер, отражающий порядок и институциональную власть Директории. Здесь почти нет случайных вещей — даже личное пространство выглядит так, словно прошло официальное утверждение.",
+        "interior_set": true,
+        "housing_slots": [
+          "personal",
+          "decor"
+        ],
+        "min_housing_class": "II",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/directorate.png",
+        "required_faction": "🛡️ ЗЕМНАЯ ДИРЕКТОРИЯ",
+        "required_faction_label": "Земная Директория"
+      },
+      {
+        "code": "order_of_veil_quarters",
+        "name": "Покои Ордена Завесы",
+        "price": 8500,
+        "rarity": "🟣 Эпический",
+        "category": "furniture",
+        "description": "Тихое личное пространство для размышлений и ритуалов Ордена. Тёмные материалы, приглушённый свет и символические элементы существуют рядом с технологиями станции, не пытаясь их скрывать.",
+        "interior_set": true,
+        "housing_slots": [
+          "personal",
+          "decor"
+        ],
+        "min_housing_class": "III",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true,
+        "local_image": "cabins/order_of_veil.png",
+        "required_faction": "🕯️ ОРДЕН ЗАВЕСЫ",
+        "required_faction_label": "Орден Завесы"
       }
     ]
   }

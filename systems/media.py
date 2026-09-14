@@ -280,6 +280,27 @@ async def stabilize_attachments(bot, attachment, peer_id, local_file=None, histo
     ищется в истории вложений диалога, куда оно было прислано игроком/админом.
     """
     sources = _split_attachments(attachment)
+
+    # Новые магазинные изображения могут существовать только как локальные файлы
+    # без заранее загруженного VK photo-ID. В этом случае загружаем PNG при первом
+    # показе и кэшируем полученный attachment по стабильному ключу local:<path>.
+    if not sources and local_file:
+        source = f"local:{local_file}"
+        cached = _ATTACHMENT_CACHE.get(source)
+        if cached:
+            return cached
+        try:
+            stable = await _upload_local_photo(bot, local_file, peer_id)
+            await _remember(source, stable)
+            _FAILED.discard(source)
+            print(f"[media] Локальное вложение загружено: {local_file} -> {stable}")
+            return stable
+        except Exception as exc:
+            if source not in _FAILED:
+                print(f"[media] Не удалось загрузить {local_file}: {exc!r}")
+                _FAILED.add(source)
+            return None
+
     if not sources:
         return None
 

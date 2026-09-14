@@ -7,7 +7,8 @@ from systems.utils import format_salary_cooldown
 
 HOUSING_SLOT_LABELS = {
     "living": "🛏 Жилая зона",
-    "work": "🖥 Рабочая зона",
+    "personal": "🪑 Личная зона",
+    "work": "🪑 Личная зона",  # legacy-совместимость со старыми комплектами
     "main": "🛋 Основная мебель",
     "lighting": "💡 Освещение",
     "decor": "🖼 Декор",
@@ -118,6 +119,26 @@ def format_public_housing_card(character, housing, interiors, housing_names, sci
     return text
 
 
+
+def get_housing_cover_item(interiors):
+    """Выбирает визуальную обложку каюты из установленных комплектов.
+
+    Приоритет отдаётся жилой/основной зоне, затем первому известному комплекту.
+    """
+    catalog = load_interior_catalog()
+    known = []
+    for _, set_code, _, _ in interiors:
+        item = catalog.get(set_code)
+        if item:
+            known.append(item)
+    if not known:
+        return None
+    for preferred_slot in ("living", "main", "personal", "decor", "lighting"):
+        for item in known:
+            if preferred_slot in item.get("housing_slots", []):
+                return item
+    return known[0]
+
 def register_housing_handlers(bot, deps):
     Keyboard = deps["Keyboard"]
     KeyboardButtonColor = deps["KeyboardButtonColor"]
@@ -140,6 +161,7 @@ def register_housing_handlers(bot, deps):
     get_user = deps["get_user"]
     subtract_balance = deps["subtract_balance"]
     update_housing_payment = deps["update_housing_payment"]
+    stabilize_attachments = deps.get("stabilize_attachments")
 
     interior_menu = (
         Keyboard(one_time=False)
@@ -266,6 +288,14 @@ def register_housing_handlers(bot, deps):
         item = find_interior_set_by_name(item_name)
         if not item or not item.get("interior_set"):
             await message.answer("Этот предмет не является интерьерным комплектом.")
+            return True
+
+        required_faction = item.get("required_faction")
+        if required_faction and character[5] != required_faction:
+            await message.answer(
+                f"⛔ Этот комплект доступен только персонажам фракции: "
+                f"{item.get('required_faction_label', required_faction)}."
+            )
             return True
 
         housing_class = housing[1]
@@ -419,7 +449,13 @@ def register_housing_handlers(bot, deps):
             return True
 
         interiors = await get_housing_interiors(target[0])
-        await message.answer(format_public_housing_card(target, housing, interiors, HOUSING_NAMES, sci_line))
+        kwargs = {"message": format_public_housing_card(target, housing, interiors, HOUSING_NAMES, sci_line)}
+        cover = get_housing_cover_item(interiors)
+        if cover and stabilize_attachments and cover.get("local_image"):
+            attachment = await stabilize_attachments(bot, cover.get("photo"), message.peer_id, cover.get("local_image"))
+            if attachment:
+                kwargs["attachment"] = attachment
+        await message.answer(**kwargs)
         return True
 
     async def publish_card(message):
@@ -428,10 +464,16 @@ def register_housing_handlers(bot, deps):
             return True
         character, housing = context
         interiors = await get_housing_interiors(character[0])
-        await message.answer(
-            "📡 ВЛАДЕЛЕЦ ПОКАЗЫВАЕТ КАЮТУ\n\n" +
-            format_public_housing_card(character, housing, interiors, HOUSING_NAMES, sci_line)
-        )
+        kwargs = {
+            "message": "📡 ВЛАДЕЛЕЦ ПОКАЗЫВАЕТ КАЮТУ\n\n"
+            + format_public_housing_card(character, housing, interiors, HOUSING_NAMES, sci_line)
+        }
+        cover = get_housing_cover_item(interiors)
+        if cover and stabilize_attachments and cover.get("local_image"):
+            attachment = await stabilize_attachments(bot, cover.get("photo"), message.peer_id, cover.get("local_image"))
+            if attachment:
+                kwargs["attachment"] = attachment
+        await message.answer(**kwargs)
         return True
 
     @bot.on.message(text="🏠 Каюта")

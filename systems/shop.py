@@ -33,22 +33,30 @@ def format_item(item, index, total, sci_line):
     if item.get("interior_set"):
         slot_names = {
             "living": "🛏 Жилая зона",
-            "work": "🖥 Рабочая зона",
+            "personal": "🪑 Личная зона",
+            "work": "🪑 Личная зона",  # legacy
             "main": "🛋 Основная мебель",
             "lighting": "💡 Освещение",
             "decor": "🖼 Декор",
         }
         slots = ", ".join(slot_names.get(slot, slot) for slot in item.get("housing_slots", []))
         extra = (
-            f"\n🧩 Слоты: {slots or '—'}"
             f"\n🏠 Минимальный класс: {item.get('min_housing_class', 'V')}"
+            f"\n🧩 Слоты: {slots or '—'}"
         )
+        if item.get("required_faction"):
+            extra += f"\n🏛 Фракция: {item.get('required_faction_label', item['required_faction'])}"
+
+    if item.get("purchasable", True):
+        price_line = f"💳 Цена: {item['price']:,} CR".replace(",", " ")
+    else:
+        price_line = "🎖 Получение: " + item.get("acquisition", "специальная награда")
 
     return (
         f"{item.get('rarity', '⚪ Обычный')}\n"
         f"{item['name']}\n"
         f"{sci_line()}\n\n"
-        f"💳 Цена: {item['price']} CR"
+        f"{price_line}"
         f"{extra}\n\n"
         f"{item.get('description', '')}\n\n"
         f"Товар {index + 1} из {total}"
@@ -81,11 +89,17 @@ def register_shop_handlers(bot, deps):
         .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
     )
 
-    def item_keyboard():
-        return (
+    def item_keyboard(item=None):
+        keyboard = (
             Keyboard(one_time=False)
             .add(Text("⬅️ Предыдущий"), color=KeyboardButtonColor.SECONDARY)
-            .add(Text("🛒 Купить"), color=KeyboardButtonColor.POSITIVE)
+        )
+        if item and not item.get("purchasable", True):
+            keyboard.add(Text("🔒 Не продаётся"), color=KeyboardButtonColor.SECONDARY)
+        else:
+            keyboard.add(Text("🛒 Купить"), color=KeyboardButtonColor.POSITIVE)
+        return (
+            keyboard
             .add(Text("➡️ Следующий"), color=KeyboardButtonColor.SECONDARY)
             .row()
             .add(Text("📂 Категории"), color=KeyboardButtonColor.PRIMARY)
@@ -124,11 +138,14 @@ def register_shop_handlers(bot, deps):
         item = items[index]
         kwargs = {
             "message": format_item(item, index, len(items), sci_line),
-            "keyboard": item_keyboard().get_json(),
+            "keyboard": item_keyboard(item).get_json(),
         }
-        if item.get("photo"):
-            stable_photo = await stabilize_attachments(bot, item["photo"], message.peer_id, item.get("local_image"))
-            kwargs["attachment"] = stable_photo or item["photo"]
+        if item.get("photo") or item.get("local_image"):
+            stable_photo = await stabilize_attachments(
+                bot, item.get("photo"), message.peer_id, item.get("local_image")
+            )
+            if stable_photo:
+                kwargs["attachment"] = stable_photo
         await message.answer(**kwargs)
 
     async def buy_current(message, quantity=1):
@@ -157,6 +174,23 @@ def register_shop_handlers(bot, deps):
             return True
         if character[10] != "approved":
             await message.answer("Покупки доступны только после одобрения квенты.")
+            return True
+
+        if not item.get("purchasable", True):
+            await message.answer(
+                "🔒 Этот интерьер нельзя купить за CR.\n"
+                + item.get("acquisition", "Он выдаётся только специальным способом."),
+                keyboard=item_keyboard(item).get_json(),
+            )
+            return True
+
+        required_faction = item.get("required_faction")
+        if required_faction and character[5] != required_faction:
+            await message.answer(
+                "⛔ Этот интерьер доступен только персонажам фракции: "
+                + item.get("required_faction_label", required_faction) + ".",
+                keyboard=item_keyboard(item).get_json(),
+            )
             return True
 
         await create_user(message.from_id)
@@ -204,7 +238,7 @@ def register_shop_handlers(bot, deps):
         await message.answer(
             f"✅ Куплено: {item_emoji} {item['name']}{quantity_text}\n"
             f"💳 -{total} CR",
-            keyboard=item_keyboard().get_json(),
+            keyboard=item_keyboard(item).get_json(),
         )
         return True
 
@@ -239,6 +273,22 @@ def register_shop_handlers(bot, deps):
     @bot.on.message(text="🛒 Купить")
     async def buy_button_handler(message):
         await buy_current(message, 1)
+
+    @bot.on.message(text="🔒 Не продаётся")
+    async def unavailable_button_handler(message):
+        session = sessions.get(message.from_id)
+        if not session:
+            await send_shop_main(message)
+            return
+        items = get_items_by_category(session["category"])
+        if not items:
+            await send_shop_main(message)
+            return
+        item = items[session["index"] % len(items)]
+        await message.answer(
+            "🎖 " + item.get("acquisition", "Этот предмет нельзя купить за CR."),
+            keyboard=item_keyboard(item).get_json(),
+        )
 
     return {
         "buy_current": buy_current,

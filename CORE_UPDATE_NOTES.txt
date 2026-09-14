@@ -1,0 +1,44 @@
+ECHOES OF THE RIFT — CABINS 2.0 + CORE/UX UPDATE
+
+IMPORTANT BEFORE DEPLOY
+1. Add BOT_OWNER_ID=<your numeric VK user id> to BotHost environment variables.
+2. Keep ADMIN_CHAT_ID configured as before.
+3. Deploy by overlaying files over the repository. Do NOT replace the live database.db.
+4. Database migrations run automatically at startup.
+
+NEW
+- Cabins 2.0 with 15 approved interior sets and images.
+- Main menu: Finances and Feedback.
+- VK standard "Начать" message, /старт and /start open the same main menu.
+- Role-based bot administration: owner / senior / admin / moderator.
+- /админ button panel in the admin chat.
+- Senior admin character deletion with reason + red confirmation.
+- /мут ID 30м reason and /размут ID. Permanent mute requires senior+.
+- Mute is enforced by middleware before handlers and cannot be bypassed with commands/buttons.
+- Promo codes support multiple rewards in one activation: CR + any shop items.
+- One VK account can redeem each promo code only once (DB UNIQUE constraint).
+- Promo global use limit, expiry and disable switch.
+- Player finance UI: balance, confirmed transfers, promo redemption, richest list.
+- Player suggestions: stored in DB, 30 minute anti-spam cooldown, admin review/reply.
+- 174 profession-specific job quests reformatted to explicit location/situation/objective/report requirements.
+- Quest reward rebalance by job level and difficulty.
+- Quest approval is atomic: double approval cannot duplicate CR/XP.
+- Old user/admin commands remain available, but old admin commands are protected by role checks.
+
+ADMIN ROLES
+owner      — full access, can manage admin staff
+senior     — all player management, character deletion, permanent mutes, promo management
+admin      — career/faction/economy/housing, temporary mutes
+moderator  — review queues and suggestions, quest/quenta moderation
+
+OWNER SETUP
+Set BOT_OWNER_ID in BotHost before launch. Example:
+BOT_OWNER_ID=123456789
+
+PROMO EXAMPLE
+Use /админ -> Промокоды -> Создать промокод.
+A single code can contain, for example:
++ 500 CR
++ Bandage x2
++ Expedition Veteran interior x1
+Each VK user can redeem that code once.

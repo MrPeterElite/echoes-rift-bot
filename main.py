@@ -1,5 +1,5 @@
 from vkbottle.bot import Bot, Message
-from vkbottle import Keyboard, KeyboardButtonColor, Text
+from vkbottle import Keyboard, KeyboardButtonColor, Text, BaseMiddleware
 from dotenv import load_dotenv
 import os
 import asyncio
@@ -59,7 +59,33 @@ from database import (
     remove_inventory_item,
     find_inventory_item,
     transfer_inventory_item,
-    update_character_arts
+    update_character_arts,
+    ensure_core_update_tables,
+    ensure_owner_admin,
+    get_bot_admin,
+    list_bot_admins,
+    upsert_bot_admin,
+    deactivate_bot_admin,
+    log_admin_action,
+    issue_mute,
+    get_active_mute,
+    revoke_mute,
+    delete_character_by_admin,
+    create_promo_code,
+    add_promo_reward,
+    get_promo_by_code,
+    get_promo_rewards,
+    list_promo_codes,
+    set_promo_active,
+    redeem_promo_code,
+    create_suggestion,
+    get_last_suggestion_time,
+    get_suggestion,
+    list_suggestions,
+    update_suggestion_status,
+    get_pending_characters,
+    get_pending_quests,
+    complete_quest_with_rewards
 )
 
 from systems.characters import register_characters_handlers
@@ -79,6 +105,8 @@ from systems.shop import register_shop_handlers, handle_shop_command
 from systems.quests import register_quest_handlers
 from systems.help import register_help_handlers
 from systems.media import stabilize_attachments
+from systems.admin import register_admin_handlers, ROLE_LEVELS
+from systems.suggestions import register_suggestion_handlers
 
 load_dotenv()
 
@@ -124,6 +152,10 @@ print(f"[config] VK token source: {TOKEN_SOURCE}")
 # Текущий административный чат проекта. Значение можно переопределить
 # переменной ADMIN_CHAT_ID на хостинге.
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "2000000001"))
+_owner_raw = (os.getenv("BOT_OWNER_ID") or "").strip()
+BOT_OWNER_ID = int(_owner_raw) if _owner_raw.isdigit() else 0
+if not BOT_OWNER_ID:
+    print("[config] WARNING: BOT_OWNER_ID is not configured; admin role system has no owner yet.")
 
 bot = Bot(token=TOKEN)
 
@@ -141,6 +173,9 @@ main_menu = (
     .row()
     .add(Text("🏠 Каюта"), color=KeyboardButtonColor.POSITIVE)
     .add(Text("🛒 Магазин"), color=KeyboardButtonColor.POSITIVE)
+    .row()
+    .add(Text("💳 Финансы"), color=KeyboardButtonColor.PRIMARY)
+    .add(Text("💡 Связь"), color=KeyboardButtonColor.PRIMARY)
 )
 
 housing_menu = (
@@ -323,6 +358,60 @@ async def delete_message_from_chat(message: Message):
         return False
 
 
+_mute_notice_at = {}
+
+
+class MuteMiddleware(BaseMiddleware[Message]):
+    async def pre(self):
+        event = self.event
+        if not getattr(event, "from_id", 0) or event.from_id <= 0:
+            return
+        now = int(time.time())
+        mute = await get_active_mute(event.from_id, now)
+        if not mute:
+            return
+
+        # В беседах удаляем сообщение для всех, в ЛС просто блокируем обработчик.
+        if event.peer_id >= 2_000_000_000:
+            try:
+                await bot.api.messages.delete(
+                    peer_id=event.peer_id,
+                    cmids=[event.conversation_message_id],
+                    delete_for_all=True,
+                )
+            except Exception:
+                pass
+
+        # Не спамим уведомлением при каждом сообщении: не чаще одного раза в 15 секунд.
+        if now - _mute_notice_at.get(event.from_id, 0) >= 15:
+            _mute_notice_at[event.from_id] = now
+            expires_at = mute[6]
+            if expires_at:
+                left = max(0, expires_at - now)
+                days, rem = divmod(left, 86400)
+                hours, rem = divmod(rem, 3600)
+                minutes = rem // 60
+                remaining = f"{days} д. {hours} ч. {minutes} мин." if days else (f"{hours} ч. {minutes} мин." if hours else f"{minutes} мин.")
+            else:
+                remaining = "без срока"
+            try:
+                await bot.api.messages.send(
+                    peer_id=event.from_id,
+                    random_id=0,
+                    message=(
+                        "🔇 ВЫ ВРЕМЕННО ОГРАНИЧЕНЫ\n"
+                        f"{sci_line()}\n\n"
+                        f"Причина: {mute[3]}\n"
+                        f"Осталось: {remaining}"
+                    ),
+                )
+            except Exception:
+                pass
+        self.stop("active mute")
+
+
+bot.labeler.message_view.register_middleware(MuteMiddleware)
+
 
 register_inventory_handlers(
     bot,
@@ -485,9 +574,14 @@ async def peer_handler(message: Message):
     await message.answer(f"ID беседы: {message.peer_id}")
 
 
-@bot.on.message(text="/старт")
+@bot.on.message(text=["/старт", "/start", "Начать", "начать"])
 async def start_handler(message: Message):
     await create_user(message.from_id)
+    # Сбрасываем незавершённые пошаговые интерфейсы при явном возврате к старту.
+    for runtime_name in ("ECONOMY_RUNTIME", "SUGGESTION_RUNTIME"):
+        runtime = globals().get(runtime_name)
+        if runtime:
+            runtime.get("sessions", {}).pop(message.from_id, None)
 
     await message.answer(
         "🌌 ◢ ECHOES OF THE RIFT [TRP] ◣\n"
@@ -502,6 +596,10 @@ async def start_handler(message: Message):
 
 @bot.on.message(text="⬅️ Назад")
 async def back_handler(message: Message):
+    for runtime_name in ("ECONOMY_RUNTIME", "SUGGESTION_RUNTIME"):
+        runtime = globals().get(runtime_name)
+        if runtime:
+            runtime.get("sessions", {}).pop(message.from_id, None)
     await message.answer(
         "◢ ГЛАВНЫЙ ТЕРМИНАЛ ◣\n\n"
         "Вы вернулись в основной интерфейс.",
@@ -558,9 +656,78 @@ register_careers_handlers(
     }
 )
 
+ECONOMY_RUNTIME = register_economy_handlers(
+    bot,
+    {
+        "Keyboard": Keyboard,
+        "KeyboardButtonColor": KeyboardButtonColor,
+        "Text": Text,
+        "get_top_richest": get_top_richest,
+        "sci_line": sci_line,
+        "get_character_by_user": get_character_by_user,
+        "get_character_by_id": get_character_by_id,
+        "create_user": create_user,
+        "transfer_balance": transfer_balance,
+        "get_user": get_user,
+        "redeem_promo_code": redeem_promo_code,
+    }
+)
+
+ADMIN_RUNTIME = register_admin_handlers(
+    bot,
+    {
+        "Keyboard": Keyboard,
+        "KeyboardButtonColor": KeyboardButtonColor,
+        "Text": Text,
+        "ADMIN_CHAT_ID": ADMIN_CHAT_ID,
+        "sci_line": sci_line,
+        "get_bot_admin": get_bot_admin,
+        "list_bot_admins": list_bot_admins,
+        "upsert_bot_admin": upsert_bot_admin,
+        "deactivate_bot_admin": deactivate_bot_admin,
+        "log_admin_action": log_admin_action,
+        "issue_mute": issue_mute,
+        "revoke_mute": revoke_mute,
+        "get_active_mute": get_active_mute,
+        "delete_character_by_admin": delete_character_by_admin,
+        "get_character_by_id": get_character_by_id,
+        "get_user": get_user,
+        "create_user": create_user,
+        "add_balance": add_balance,
+        "subtract_balance": subtract_balance,
+        "set_balance": set_balance,
+        "update_character_job": update_character_job,
+        "update_faction_rank": update_faction_rank,
+        "get_department_key_by_name": get_department_key_by_name,
+        "DEPARTMENTS": DEPARTMENTS,
+        "SALARY_BY_LEVEL": SALARY_BY_LEVEL,
+        "FACTION_RANKS": FACTION_RANKS,
+        "get_housing": get_housing,
+        "get_housing_interiors": get_housing_interiors,
+        "assign_housing": assign_housing,
+        "remove_housing": remove_housing,
+        "update_housing_class": update_housing_class,
+        "HOUSING_NAMES": HOUSING_NAMES,
+        "HOUSING_CLASS_CAPACITY": HOUSING_CLASS_CAPACITY,
+        "get_used_slots": get_used_slots,
+        "create_promo_code": create_promo_code,
+        "add_promo_reward": add_promo_reward,
+        "list_promo_codes": list_promo_codes,
+        "set_promo_active": set_promo_active,
+        "get_pending_characters": get_pending_characters,
+        "get_pending_quests": get_pending_quests,
+        "get_suggestion": get_suggestion,
+        "list_suggestions": list_suggestions,
+        "update_suggestion_status": update_suggestion_status,
+    }
+)
+
 register_quest_handlers(
     bot,
     {
+        "Keyboard": Keyboard,
+        "KeyboardButtonColor": KeyboardButtonColor,
+        "Text": Text,
         "get_character_by_user": get_character_by_user,
         "get_character_by_id": get_character_by_id,
         "get_current_quest": get_current_quest,
@@ -569,26 +736,29 @@ register_quest_handlers(
         "submit_quest_report": submit_quest_report,
         "get_quest_by_id": get_quest_by_id,
         "update_quest_status": update_quest_status,
-        "add_balance": add_balance,
-        "add_xp": add_xp,
+        "complete_quest_with_rewards": complete_quest_with_rewards,
         "get_photo_attachment": get_photo_attachment,
         "sci_line": sci_line,
         "career_menu": career_menu,
         "ADMIN_CHAT_ID": ADMIN_CHAT_ID,
         "WEEK_SECONDS": WEEK_SECONDS,
+        "has_admin_role": ADMIN_RUNTIME["has_role"],
     }
 )
 
-register_economy_handlers(
+SUGGESTION_RUNTIME = register_suggestion_handlers(
     bot,
     {
-        "get_top_richest": get_top_richest,
+        "Keyboard": Keyboard,
+        "KeyboardButtonColor": KeyboardButtonColor,
+        "Text": Text,
         "sci_line": sci_line,
+        "ADMIN_CHAT_ID": ADMIN_CHAT_ID,
         "get_character_by_user": get_character_by_user,
-        "get_character_by_id": get_character_by_id,
-        "create_user": create_user,
-        "transfer_balance": transfer_balance,
-        "get_user": get_user,
+        "get_photo_attachment": get_photo_attachment,
+        "create_suggestion": create_suggestion,
+        "get_last_suggestion_time": get_last_suggestion_time,
+        "list_suggestions": list_suggestions,
     }
 )
 
@@ -631,6 +801,7 @@ HOUSING_RUNTIME = register_housing_handlers(
         "get_user": get_user,
         "subtract_balance": subtract_balance,
         "update_housing_payment": update_housing_payment,
+        "stabilize_attachments": stabilize_attachments,
     }
 )
 
@@ -659,6 +830,14 @@ register_help_handlers(
 @bot.on.message()
 async def router_handler(message: Message):
     text = message.text or ""
+
+    # Свободный ввод пошаговых интерфейсов обрабатывается до общего роутинга.
+    if await ADMIN_RUNTIME["handle_admin_message"](message):
+        return
+    if await ECONOMY_RUNTIME["handle_economy_message"](message):
+        return
+    if await SUGGESTION_RUNTIME["handle_suggestion_message"](message):
+        return
 
     if await handle_shop_command(message, SHOP_DEPS):
         return
@@ -703,6 +882,21 @@ async def router_handler(message: Message):
                     return
 
     if message.peer_id == ADMIN_CHAT_ID:
+        # Сам факт нахождения в админ-беседе больше не даёт полномочий.
+        if not await ADMIN_RUNTIME["has_role"](message.from_id, "moderator"):
+            return
+
+        # Старые опасные команды сохранены, но требуют уровня Администратор+.
+        admin_only_prefixes = (
+            "/назначить ", "/повысить ", "/понизить ",
+            "/фповысить ", "/фпонизить ",
+            "/выдатькаюту ", "/забратькаюту ", "/переселить ", "/улучшитькаюту ",
+            "/деньги ", "/снятьденьги ", "/баланс ", "/отделы"
+        )
+        if text.startswith(admin_only_prefixes) and not await ADMIN_RUNTIME["has_role"](message.from_id, "admin"):
+            await message.answer("⛔ Для этой команды требуется роль Администратор или выше.")
+            return
+
         if text.startswith("/назначить "):
             parts = text.split()
 
@@ -1535,5 +1729,7 @@ asyncio.run(ensure_quest_tables())
 asyncio.run(ensure_housing_tables())
 asyncio.run(ensure_location_tables())
 asyncio.run(ensure_inventory_tables())
+asyncio.run(ensure_core_update_tables())
+asyncio.run(ensure_owner_admin(BOT_OWNER_ID, int(time.time())))
 
 bot.run()

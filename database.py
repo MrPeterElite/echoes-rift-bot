@@ -690,9 +690,22 @@ async def ensure_quest_tables():
         assigned_at INTEGER DEFAULT 0,
         report_text TEXT,
         report_attachment TEXT,
-        report_time INTEGER DEFAULT 0
+        report_time INTEGER DEFAULT 0,
+        location TEXT DEFAULT '',
+        difficulty TEXT DEFAULT '',
+        report_requirements TEXT DEFAULT ''
     )
     """)
+    cursor = await db.execute("PRAGMA table_info(weekly_quests)")
+    columns = {row[1] for row in await cursor.fetchall()}
+    migrations = {
+        "location": "TEXT DEFAULT ''",
+        "difficulty": "TEXT DEFAULT ''",
+        "report_requirements": "TEXT DEFAULT ''",
+    }
+    for column, column_type in migrations.items():
+        if column not in columns:
+            await db.execute(f"ALTER TABLE weekly_quests ADD COLUMN {column} {column_type}")
     await db.commit()
     await db.close()
 
@@ -721,14 +734,22 @@ async def get_last_quest(character_id):
     await db.close()
     return row
 
-async def create_weekly_quest(character_id, title, description, credits, xp, assigned_at):
+async def create_weekly_quest(
+    character_id, title, description, credits, xp, assigned_at,
+    location="", difficulty="", report_requirements=""
+):
+    await ensure_quest_tables()
     db = await connect()
     cursor = await db.execute("""
         INSERT INTO weekly_quests (
-            character_id, title, description, credits, xp, status, assigned_at
+            character_id, title, description, credits, xp, status, assigned_at,
+            location, difficulty, report_requirements
         )
-        VALUES (?, ?, ?, ?, ?, 'active', ?)
-    """, (character_id, title, description, credits, xp, assigned_at))
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+    """, (
+        character_id, title, description, credits, xp, assigned_at,
+        location, difficulty, report_requirements
+    ))
     quest_id = cursor.lastrowid
     await db.commit()
     await db.close()
@@ -862,46 +883,58 @@ async def set_character_location(character_id, location_code):
 
 
 async def transfer_balance(from_user_id, to_user_id, amount):
+    """Атомарный перевод CR между VK-пользователями."""
+    try:
+        amount = int(amount)
+    except (TypeError, ValueError):
+        return False, "invalid_amount"
+    if amount <= 0:
+        return False, "invalid_amount"
+    if int(from_user_id) == int(to_user_id):
+        return False, "same_user"
+
     db = await connect()
+    try:
+        await db.execute("BEGIN IMMEDIATE")
 
-    cursor = await db.execute(
-        "SELECT balance FROM users WHERE user_id = ?",
-        (from_user_id,)
-    )
-    sender = await cursor.fetchone()
+        cursor = await db.execute(
+            "SELECT balance FROM users WHERE user_id = ?",
+            (from_user_id,)
+        )
+        sender = await cursor.fetchone()
+        if not sender:
+            await db.rollback()
+            return False, "sender_not_found"
 
-    if not sender:
+        cursor = await db.execute(
+            "SELECT balance FROM users WHERE user_id = ?",
+            (to_user_id,)
+        )
+        receiver = await cursor.fetchone()
+        if not receiver:
+            await db.rollback()
+            return False, "receiver_not_found"
+
+        # Условное списание защищает от ухода баланса в минус даже при конкурирующих запросах.
+        cursor = await db.execute(
+            "UPDATE users SET balance = balance - ? WHERE user_id = ? AND balance >= ?",
+            (amount, from_user_id, amount)
+        )
+        if cursor.rowcount != 1:
+            await db.rollback()
+            return False, "not_enough_money"
+
+        await db.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (amount, to_user_id)
+        )
+        await db.commit()
+        return True, "ok"
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
         await db.close()
-        return False, "sender_not_found"
-
-    if sender[0] < amount:
-        await db.close()
-        return False, "not_enough_money"
-
-    cursor = await db.execute(
-        "SELECT balance FROM users WHERE user_id = ?",
-        (to_user_id,)
-    )
-    receiver = await cursor.fetchone()
-
-    if not receiver:
-        await db.close()
-        return False, "receiver_not_found"
-
-    await db.execute(
-        "UPDATE users SET balance = balance - ? WHERE user_id = ?",
-        (amount, from_user_id)
-    )
-
-    await db.execute(
-        "UPDATE users SET balance = balance + ? WHERE user_id = ?",
-        (amount, to_user_id)
-    )
-
-    await db.commit()
-    await db.close()
-
-    return True, "ok"
 
 
 async def get_top_richest(limit=10):
@@ -1115,3 +1148,563 @@ async def update_character_arts(character_id, arts):
             (arts, character_id),
         )
         await db.commit()
+
+
+# ============================================================
+# CORE / UX UPDATE: administration, punishments, promos, suggestions
+# ============================================================
+
+async def ensure_core_update_tables():
+    await ensure_inventory_tables()
+    db = await connect()
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS bot_admins (
+        vk_user_id INTEGER PRIMARY KEY,
+        role TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        added_by INTEGER,
+        created_at INTEGER DEFAULT 0
+    )
+    """)
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_vk_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        target_vk_id INTEGER,
+        target_character_id INTEGER,
+        details TEXT DEFAULT '',
+        created_at INTEGER DEFAULT 0
+    )
+    """)
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS punishments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vk_user_id INTEGER NOT NULL,
+        character_id INTEGER,
+        type TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        issued_by INTEGER NOT NULL,
+        created_at INTEGER DEFAULT 0,
+        expires_at INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 1,
+        revoked_by INTEGER,
+        revoked_at INTEGER DEFAULT 0
+    )
+    """)
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_punishments_user ON punishments(vk_user_id, type, active)")
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS promo_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        max_uses INTEGER DEFAULT 0,
+        used_count INTEGER DEFAULT 0,
+        expires_at INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 1,
+        created_by INTEGER NOT NULL,
+        created_at INTEGER DEFAULT 0
+    )
+    """)
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS promo_rewards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        promo_code_id INTEGER NOT NULL,
+        reward_type TEXT NOT NULL,
+        reward_key TEXT DEFAULT '',
+        item_name TEXT DEFAULT '',
+        item_category TEXT DEFAULT '',
+        amount INTEGER NOT NULL DEFAULT 1
+    )
+    """)
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS promo_redemptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        promo_code_id INTEGER NOT NULL,
+        vk_user_id INTEGER NOT NULL,
+        character_id INTEGER,
+        redeemed_at INTEGER DEFAULT 0,
+        UNIQUE(promo_code_id, vk_user_id)
+    )
+    """)
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS suggestions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vk_user_id INTEGER NOT NULL,
+        character_id INTEGER,
+        text TEXT NOT NULL,
+        attachment TEXT,
+        status TEXT DEFAULT 'new',
+        admin_response TEXT DEFAULT '',
+        created_at INTEGER DEFAULT 0,
+        reviewed_by INTEGER,
+        reviewed_at INTEGER DEFAULT 0
+    )
+    """)
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status, created_at)")
+
+    await db.commit()
+    await db.close()
+
+
+async def ensure_owner_admin(owner_vk_id, now=0):
+    if not owner_vk_id:
+        return
+    await ensure_core_update_tables()
+    db = await connect()
+    await db.execute("""
+        INSERT INTO bot_admins (vk_user_id, role, active, added_by, created_at)
+        VALUES (?, 'owner', 1, ?, ?)
+        ON CONFLICT(vk_user_id) DO UPDATE SET role='owner', active=1
+    """, (int(owner_vk_id), int(owner_vk_id), int(now or 0)))
+    await db.commit()
+    await db.close()
+
+
+async def get_bot_admin(vk_user_id):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute(
+        "SELECT vk_user_id, role, active, added_by, created_at FROM bot_admins WHERE vk_user_id = ?",
+        (vk_user_id,)
+    )
+    row = await cursor.fetchone()
+    await db.close()
+    return row
+
+
+async def list_bot_admins():
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        SELECT vk_user_id, role, active, added_by, created_at
+        FROM bot_admins
+        ORDER BY CASE role WHEN 'owner' THEN 4 WHEN 'senior' THEN 3 WHEN 'admin' THEN 2 ELSE 1 END DESC,
+                 vk_user_id
+    """)
+    rows = await cursor.fetchall()
+    await db.close()
+    return rows
+
+
+async def upsert_bot_admin(vk_user_id, role, added_by, created_at):
+    if role not in {'owner', 'senior', 'admin', 'moderator'}:
+        raise ValueError('invalid admin role')
+    await ensure_core_update_tables()
+    db = await connect()
+    await db.execute("""
+        INSERT INTO bot_admins (vk_user_id, role, active, added_by, created_at)
+        VALUES (?, ?, 1, ?, ?)
+        ON CONFLICT(vk_user_id) DO UPDATE SET role=excluded.role, active=1, added_by=excluded.added_by
+    """, (vk_user_id, role, added_by, created_at))
+    await db.commit()
+    await db.close()
+
+
+async def deactivate_bot_admin(vk_user_id):
+    await ensure_core_update_tables()
+    db = await connect()
+    await db.execute("UPDATE bot_admins SET active = 0 WHERE vk_user_id = ? AND role != 'owner'", (vk_user_id,))
+    await db.commit()
+    await db.close()
+
+
+async def log_admin_action(admin_vk_id, action, target_vk_id=None, target_character_id=None, details='', created_at=0):
+    await ensure_core_update_tables()
+    db = await connect()
+    await db.execute("""
+        INSERT INTO admin_audit_log (
+            admin_vk_id, action, target_vk_id, target_character_id, details, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    """, (admin_vk_id, action, target_vk_id, target_character_id, details or '', created_at))
+    await db.commit()
+    await db.close()
+
+
+async def issue_mute(vk_user_id, character_id, reason, issued_by, created_at, expires_at):
+    await ensure_core_update_tables()
+    db = await connect()
+    try:
+        await db.execute("BEGIN IMMEDIATE")
+        await db.execute("""
+            UPDATE punishments SET active = 0, revoked_by = ?, revoked_at = ?
+            WHERE vk_user_id = ? AND type = 'mute' AND active = 1
+        """, (issued_by, created_at, vk_user_id))
+        cursor = await db.execute("""
+            INSERT INTO punishments (
+                vk_user_id, character_id, type, reason, issued_by,
+                created_at, expires_at, active
+            ) VALUES (?, ?, 'mute', ?, ?, ?, ?, 1)
+        """, (vk_user_id, character_id, reason, issued_by, created_at, expires_at))
+        punishment_id = cursor.lastrowid
+        await db.commit()
+        return punishment_id
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+
+async def get_active_mute(vk_user_id, now):
+    # Таблицы гарантированно создаются при старте бота; эта функция вызывается
+    # middleware на каждом входящем сообщении, поэтому здесь не запускаем миграции повторно.
+    db = await connect()
+    await db.execute("""
+        UPDATE punishments SET active = 0
+        WHERE vk_user_id = ? AND type = 'mute' AND active = 1
+          AND expires_at > 0 AND expires_at <= ?
+    """, (vk_user_id, now))
+    cursor = await db.execute("""
+        SELECT id, vk_user_id, character_id, reason, issued_by, created_at, expires_at
+        FROM punishments
+        WHERE vk_user_id = ? AND type = 'mute' AND active = 1
+        ORDER BY id DESC LIMIT 1
+    """, (vk_user_id,))
+    row = await cursor.fetchone()
+    await db.commit()
+    await db.close()
+    return row
+
+
+async def revoke_mute(vk_user_id, revoked_by, revoked_at):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        UPDATE punishments
+        SET active = 0, revoked_by = ?, revoked_at = ?
+        WHERE vk_user_id = ? AND type = 'mute' AND active = 1
+    """, (revoked_by, revoked_at, vk_user_id))
+    changed = cursor.rowcount
+    await db.commit()
+    await db.close()
+    return changed > 0
+
+
+async def delete_character_by_admin(character_id, reset_account=True):
+    """Удалить одну квенту и её игровое состояние. Возвращает (ok, user_id, name)."""
+    await ensure_core_update_tables()
+    db = await connect()
+    try:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute("SELECT user_id, name FROM characters WHERE id = ?", (character_id,))
+        row = await cursor.fetchone()
+        if not row:
+            await db.rollback()
+            return False, None, None
+        user_id, name = row
+        for table in (
+            'housing_interior_slots', 'housing_interiors', 'housing', 'inventory',
+            'weekly_quests', 'character_locations'
+        ):
+            try:
+                await db.execute(f"DELETE FROM {table} WHERE character_id = ?", (character_id,))
+            except aiosqlite.OperationalError:
+                pass
+        await db.execute("DELETE FROM characters WHERE id = ?", (character_id,))
+        if reset_account:
+            await db.execute(
+                "UPDATE users SET balance = 1500, xp = 0, level = 1 WHERE user_id = ?",
+                (user_id,)
+            )
+        await db.commit()
+        return True, user_id, name
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+
+async def create_promo_code(code, max_uses, expires_at, created_by, created_at):
+    await ensure_core_update_tables()
+    db = await connect()
+    try:
+        cursor = await db.execute("""
+            INSERT INTO promo_codes (code, max_uses, used_count, expires_at, active, created_by, created_at)
+            VALUES (?, ?, 0, ?, 1, ?, ?)
+        """, (code.strip().upper(), max(0, int(max_uses or 0)), int(expires_at or 0), created_by, created_at))
+        promo_id = cursor.lastrowid
+        await db.commit()
+        return promo_id
+    finally:
+        await db.close()
+
+
+async def add_promo_reward(promo_code_id, reward_type, amount, reward_key='', item_name='', item_category=''):
+    if reward_type not in {'currency', 'item'}:
+        raise ValueError('invalid reward type')
+    if int(amount) <= 0:
+        raise ValueError('amount must be positive')
+    await ensure_core_update_tables()
+    db = await connect()
+    await db.execute("""
+        INSERT INTO promo_rewards (
+            promo_code_id, reward_type, reward_key, item_name, item_category, amount
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    """, (promo_code_id, reward_type, reward_key or '', item_name or '', item_category or '', int(amount)))
+    await db.commit()
+    await db.close()
+
+
+async def get_promo_by_code(code):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        SELECT id, code, max_uses, used_count, expires_at, active, created_by, created_at
+        FROM promo_codes WHERE code = ? COLLATE NOCASE
+    """, (code.strip(),))
+    row = await cursor.fetchone()
+    await db.close()
+    return row
+
+
+async def get_promo_rewards(promo_id):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        SELECT id, reward_type, reward_key, item_name, item_category, amount
+        FROM promo_rewards WHERE promo_code_id = ? ORDER BY id
+    """, (promo_id,))
+    rows = await cursor.fetchall()
+    await db.close()
+    return rows
+
+
+async def list_promo_codes(limit=25):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        SELECT id, code, max_uses, used_count, expires_at, active, created_by, created_at
+        FROM promo_codes ORDER BY id DESC LIMIT ?
+    """, (limit,))
+    rows = await cursor.fetchall()
+    await db.close()
+    return rows
+
+
+async def set_promo_active(code, active):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute(
+        "UPDATE promo_codes SET active = ? WHERE code = ? COLLATE NOCASE",
+        (1 if active else 0, code.strip())
+    )
+    changed = cursor.rowcount
+    await db.commit()
+    await db.close()
+    return changed > 0
+
+
+async def redeem_promo_code(code, vk_user_id, character_id, now):
+    """Атомарно выдаёт ВСЕ награды. Один VK ID может активировать код один раз."""
+    await ensure_core_update_tables()
+    db = await connect()
+    try:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute("""
+            SELECT id, code, max_uses, used_count, expires_at, active
+            FROM promo_codes WHERE code = ? COLLATE NOCASE
+        """, (code.strip(),))
+        promo = await cursor.fetchone()
+        if not promo:
+            await db.rollback(); return False, 'not_found', []
+        promo_id, normalized, max_uses, used_count, expires_at, active = promo
+        if not active:
+            await db.rollback(); return False, 'inactive', []
+        if expires_at and expires_at <= now:
+            await db.rollback(); return False, 'expired', []
+        if max_uses and used_count >= max_uses:
+            await db.rollback(); return False, 'limit', []
+        cursor = await db.execute(
+            "SELECT 1 FROM promo_redemptions WHERE promo_code_id = ? AND vk_user_id = ?",
+            (promo_id, vk_user_id)
+        )
+        if await cursor.fetchone():
+            await db.rollback(); return False, 'already_used', []
+
+        # Награды предметами всегда привязаны к действующему одобренному персонажу
+        # именно этого VK-пользователя. Это не даёт подменить character_id вручную.
+        cursor = await db.execute("""
+            SELECT 1 FROM characters
+            WHERE id = ? AND user_id = ? AND status = 'approved'
+        """, (character_id, vk_user_id))
+        if not await cursor.fetchone():
+            await db.rollback(); return False, 'character_invalid', []
+
+        cursor = await db.execute("""
+            SELECT reward_type, reward_key, item_name, item_category, amount
+            FROM promo_rewards WHERE promo_code_id = ? ORDER BY id
+        """, (promo_id,))
+        rewards = await cursor.fetchall()
+        if not rewards:
+            await db.rollback(); return False, 'no_rewards', []
+
+        cursor = await db.execute("SELECT 1 FROM users WHERE user_id = ?", (vk_user_id,))
+        if not await cursor.fetchone():
+            await db.execute(
+                "INSERT INTO users (user_id, balance, xp, level) VALUES (?, 1500, 0, 1)",
+                (vk_user_id,)
+            )
+
+        for reward_type, reward_key, item_name, item_category, amount in rewards:
+            if reward_type == 'currency':
+                await db.execute(
+                    "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+                    (amount, vk_user_id)
+                )
+            elif reward_type == 'item':
+                await db.execute("""
+                    INSERT INTO inventory (character_id, category, item_name, quantity)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(character_id, category, item_name)
+                    DO UPDATE SET quantity = quantity + excluded.quantity
+                """, (character_id, item_category, item_name, amount))
+
+        await db.execute("""
+            INSERT INTO promo_redemptions (promo_code_id, vk_user_id, character_id, redeemed_at)
+            VALUES (?, ?, ?, ?)
+        """, (promo_id, vk_user_id, character_id, now))
+        await db.execute(
+            "UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?",
+            (promo_id,)
+        )
+        await db.commit()
+        return True, normalized, rewards
+    except aiosqlite.IntegrityError:
+        await db.rollback()
+        return False, 'already_used', []
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+
+async def create_suggestion(vk_user_id, character_id, text, attachment, created_at):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        INSERT INTO suggestions (vk_user_id, character_id, text, attachment, status, created_at)
+        VALUES (?, ?, ?, ?, 'new', ?)
+    """, (vk_user_id, character_id, text, attachment, created_at))
+    suggestion_id = cursor.lastrowid
+    await db.commit()
+    await db.close()
+    return suggestion_id
+
+
+async def get_last_suggestion_time(vk_user_id):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute(
+        "SELECT created_at FROM suggestions WHERE vk_user_id = ? ORDER BY id DESC LIMIT 1",
+        (vk_user_id,)
+    )
+    row = await cursor.fetchone()
+    await db.close()
+    return row[0] if row else 0
+
+
+async def get_suggestion(suggestion_id):
+    await ensure_core_update_tables()
+    db = await connect()
+    cursor = await db.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,))
+    row = await cursor.fetchone()
+    await db.close()
+    return row
+
+
+async def list_suggestions(status='new', limit=20):
+    await ensure_core_update_tables()
+    db = await connect()
+    if status:
+        cursor = await db.execute(
+            "SELECT * FROM suggestions WHERE status = ? ORDER BY id DESC LIMIT ?",
+            (status, limit)
+        )
+    else:
+        cursor = await db.execute("SELECT * FROM suggestions ORDER BY id DESC LIMIT ?", (limit,))
+    rows = await cursor.fetchall()
+    await db.close()
+    return rows
+
+
+async def update_suggestion_status(suggestion_id, status, reviewed_by, reviewed_at, admin_response=None):
+    await ensure_core_update_tables()
+    db = await connect()
+    if admin_response is None:
+        await db.execute("""
+            UPDATE suggestions SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?
+        """, (status, reviewed_by, reviewed_at, suggestion_id))
+    else:
+        await db.execute("""
+            UPDATE suggestions
+            SET status = ?, reviewed_by = ?, reviewed_at = ?, admin_response = ?
+            WHERE id = ?
+        """, (status, reviewed_by, reviewed_at, admin_response, suggestion_id))
+    await db.commit()
+    await db.close()
+
+
+async def get_pending_characters(limit=20):
+    db = await connect()
+    cursor = await db.execute(
+        "SELECT * FROM characters WHERE status = 'pending' ORDER BY id ASC LIMIT ?", (limit,)
+    )
+    rows = await cursor.fetchall()
+    await db.close()
+    return rows
+
+
+async def get_pending_quests(limit=20):
+    await ensure_quest_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        SELECT * FROM weekly_quests WHERE status = 'review' ORDER BY report_time ASC, id ASC LIMIT ?
+    """, (limit,))
+    rows = await cursor.fetchall()
+    await db.close()
+    return rows
+
+
+async def complete_quest_with_rewards(quest_id):
+    """Атомарное принятие отчёта: статус + CR + XP выдаются ровно один раз."""
+    db = await connect()
+    try:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute(
+            "SELECT character_id, credits, xp, status FROM weekly_quests WHERE id = ?",
+            (quest_id,)
+        )
+        quest = await cursor.fetchone()
+        if not quest:
+            await db.rollback(); return False, 'not_found', None
+        character_id, credits, xp, status = quest
+        if status != 'review':
+            await db.rollback(); return False, 'wrong_status', None
+        cursor = await db.execute("SELECT user_id FROM characters WHERE id = ?", (character_id,))
+        row = await cursor.fetchone()
+        if not row:
+            await db.rollback(); return False, 'character_not_found', None
+        user_id = row[0]
+        cursor = await db.execute(
+            "UPDATE weekly_quests SET status = 'completed' WHERE id = ? AND status = 'review'",
+            (quest_id,)
+        )
+        if cursor.rowcount != 1:
+            await db.rollback(); return False, 'already_processed', None
+        await db.execute("UPDATE users SET balance = balance + ?, xp = xp + ? WHERE user_id = ?", (credits, xp, user_id))
+        await db.commit()
+        return True, 'ok', (character_id, user_id, credits, xp)
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()

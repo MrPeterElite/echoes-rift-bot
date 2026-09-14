@@ -16,6 +16,13 @@ def load_quest_catalog():
     return {}
 
 
+def quest_catalog_description(selected):
+    return (
+        f"⚠️ СИТУАЦИЯ\n{selected.get('situation', '')}\n\n"
+        f"🎯 ВАША ЗАДАЧА\n{selected.get('objective', selected.get('description', ''))}"
+    )
+
+
 def format_quest(quest, sci_line):
     status_map = {
         "active": "🟡 ВЫПОЛНЯЕТСЯ",
@@ -23,11 +30,22 @@ def format_quest(quest, sci_line):
         "rejected": "🔴 ОТЧЁТ ОТКЛОНЁН",
         "completed": "🟢 ВЫПОЛНЕНО",
     }
+    location = quest[11] if len(quest) > 11 and quest[11] else "не указана"
+    difficulty = quest[12] if len(quest) > 12 and quest[12] else "normal"
+    report_requirements = quest[13] if len(quest) > 13 and quest[13] else "Опишите ход RP-сцены, действия персонажа и итог."
+    diff_label = {
+        "simple": "🟢 Обычная",
+        "normal": "🟡 Повышенная",
+        "hard": "🔴 Сложная",
+    }.get(difficulty, difficulty)
     return (
         "◢ ДОЛЖНОСТНОЕ ЗАДАНИЕ ◣\n"
         f"{sci_line()}\n\n"
-        f"📌 {quest[2]}\n\n"
+        f"📌 {quest[2]}\n"
+        f"📍 Место: {location}\n"
+        f"⚙️ Сложность: {diff_label}\n\n"
         f"{quest[3]}\n\n"
+        f"📋 ЧТО ДОЛЖНО БЫТЬ В ОТЧЁТЕ\n{report_requirements}\n\n"
         f"💳 Награда: {quest[4]} CR\n"
         f"⭐ Опыт: {quest[5]} XP\n"
         f"📡 Статус: {status_map.get(quest[6], quest[6])}\n\n"
@@ -37,6 +55,9 @@ def format_quest(quest, sci_line):
 
 
 def register_quest_handlers(bot, deps):
+    Keyboard = deps["Keyboard"]
+    KeyboardButtonColor = deps["KeyboardButtonColor"]
+    Text = deps["Text"]
     get_character_by_user = deps["get_character_by_user"]
     get_character_by_id = deps["get_character_by_id"]
     get_current_quest = deps["get_current_quest"]
@@ -45,13 +66,13 @@ def register_quest_handlers(bot, deps):
     submit_quest_report = deps["submit_quest_report"]
     get_quest_by_id = deps["get_quest_by_id"]
     update_quest_status = deps["update_quest_status"]
-    add_balance = deps["add_balance"]
-    add_xp = deps["add_xp"]
+    complete_quest_with_rewards = deps["complete_quest_with_rewards"]
     get_photo_attachment = deps["get_photo_attachment"]
     sci_line = deps["sci_line"]
     career_menu = deps["career_menu"]
     ADMIN_CHAT_ID = deps["ADMIN_CHAT_ID"]
     WEEK_SECONDS = deps["WEEK_SECONDS"]
+    has_admin_role = deps["has_admin_role"]
 
     async def require_career(message):
         character = await get_character_by_user(message.from_id)
@@ -108,8 +129,15 @@ def register_quest_handlers(bot, deps):
                 choices = alternatives
         selected = random.choice(choices)
         quest_id = await create_weekly_quest(
-            character[0], selected["title"], selected["description"],
-            int(selected.get("credits", 0)), int(selected.get("xp", 0)), now,
+            character[0],
+            selected["title"],
+            quest_catalog_description(selected),
+            int(selected.get("credits", 0)),
+            int(selected.get("xp", 0)),
+            now,
+            selected.get("location", ""),
+            selected.get("difficulty", "normal"),
+            selected.get("report_requirements", ""),
         )
         quest = await get_quest_by_id(quest_id)
         await message.answer(format_quest(quest, sci_line), keyboard=career_menu.get_json())
@@ -131,7 +159,7 @@ def register_quest_handlers(bot, deps):
             f"{sci_line()}\n\n"
             "Отправьте сообщение в формате:\n"
             "/отчёт текст выполненной работы\n\n"
-            "При необходимости к этому же сообщению можно прикрепить фотографию.",
+            "Опишите именно разыгранную сцену и решения персонажа. При необходимости можно прикрепить фотографию.",
             keyboard=career_menu.get_json(),
         )
 
@@ -148,12 +176,17 @@ def register_quest_handlers(bot, deps):
             await message.answer("Этот отчёт уже находится на проверке.", keyboard=career_menu.get_json())
             return
         report = (report or "").strip()
-        if len(report) < 10:
-            await message.answer("Отчёт слишком короткий. Опишите выполненную работу подробнее.")
+        if len(report) < 30:
+            await message.answer("Отчёт слишком короткий. Опишите выполненную RP-сцену подробнее (минимум 30 символов).")
             return
         attachment = get_photo_attachment(message)
         await submit_quest_report(quest[0], report, attachment, int(time.time()))
 
+        admin_keyboard = (
+            Keyboard(one_time=False)
+            .add(Text(f"✅ Принять задание {quest[0]}"), color=KeyboardButtonColor.POSITIVE)
+            .add(Text(f"❌ Отклонить задание {quest[0]}"), color=KeyboardButtonColor.NEGATIVE)
+        )
         admin_text = (
             "📨 НОВЫЙ ОТЧЁТ ПО ЗАДАНИЮ\n"
             f"{sci_line()}\n\n"
@@ -161,63 +194,59 @@ def register_quest_handlers(bot, deps):
             f"🧬 Персонаж: #{character[0]} — {character[2]}\n"
             f"📂 Отдел: {character[11]}\n"
             f"💼 Должность: {character[12]}\n\n"
-            f"📌 {quest[2]}\n\n"
-            f"📝 Отчёт:\n{report}\n\n"
+            f"📌 {quest[2]}\n"
+            f"📍 {quest[11] if len(quest) > 11 and quest[11] else 'не указано'}\n\n"
+            f"📝 ОТЧЁТ\n{report}\n\n"
             f"💳 Награда: {quest[4]} CR\n"
-            f"⭐ Опыт: {quest[5]} XP\n\n"
-            f"/принятьзадание {quest[0]}\n"
-            f"/отклонитьзадание {quest[0]}"
+            f"⭐ Опыт: {quest[5]} XP"
         )
-        kwargs = {"peer_id": ADMIN_CHAT_ID, "random_id": 0, "message": admin_text}
+        kwargs = {
+            "peer_id": ADMIN_CHAT_ID,
+            "random_id": 0,
+            "message": admin_text,
+            "keyboard": admin_keyboard.get_json(),
+        }
         if attachment:
             kwargs["attachment"] = attachment
         await bot.api.messages.send(**kwargs)
         await message.answer("✅ Отчёт отправлен администрации на проверку.", keyboard=career_menu.get_json())
 
-    @bot.on.message(text="/принятьзадание <quest_id>")
-    async def approve_quest_handler(message, quest_id=None):
-        if message.peer_id != ADMIN_CHAT_ID:
-            return
-        try:
-            quest_id = int(quest_id)
-        except (TypeError, ValueError):
-            await message.answer("Использование: /принятьзадание ID")
+    async def approve_quest(message, quest_id):
+        if message.peer_id != ADMIN_CHAT_ID or not await has_admin_role(message.from_id, "moderator"):
             return
         quest = await get_quest_by_id(quest_id)
         if not quest:
             await message.answer("Задание не найдено.")
             return
-        if quest[6] != "review":
-            await message.answer("Это задание сейчас не ожидает проверки.")
+        ok, reason, reward = await complete_quest_with_rewards(quest_id)
+        if not ok:
+            errors = {
+                "wrong_status": "Это задание сейчас не ожидает проверки.",
+                "already_processed": "Отчёт уже обработан другим администратором.",
+                "character_not_found": "Персонаж задания не найден.",
+            }
+            await message.answer(errors.get(reason, "Задание не удалось принять."))
             return
-        character = await get_character_by_id(quest[1])
-        if not character:
-            await message.answer("Персонаж задания не найден.")
-            return
-        await update_quest_status(quest_id, "completed")
-        await add_balance(character[1], quest[4])
-        await add_xp(character[1], quest[5])
-        await bot.api.messages.send(
-            peer_id=character[1], random_id=0,
-            message=(
-                "🟢 ДОЛЖНОСТНОЕ ЗАДАНИЕ ПРИНЯТО\n"
-                f"{sci_line()}\n\n"
-                f"📌 {quest[2]}\n\n"
-                f"💳 Получено: +{quest[4]} CR\n"
-                f"⭐ Получено: +{quest[5]} XP\n\n"
-                "Новое задание станет доступно после недельного интервала."
-            ),
-        )
-        await message.answer(f"✅ Задание #{quest_id} принято. Награда начислена.")
-
-    @bot.on.message(text="/отклонитьзадание <quest_id>")
-    async def reject_quest_handler(message, quest_id=None):
-        if message.peer_id != ADMIN_CHAT_ID:
-            return
+        character_id, user_id, credits, xp = reward
+        character = await get_character_by_id(character_id)
         try:
-            quest_id = int(quest_id)
-        except (TypeError, ValueError):
-            await message.answer("Использование: /отклонитьзадание ID")
+            await bot.api.messages.send(
+                peer_id=user_id, random_id=0,
+                message=(
+                    "🟢 ДОЛЖНОСТНОЕ ЗАДАНИЕ ПРИНЯТО\n"
+                    f"{sci_line()}\n\n"
+                    f"📌 {quest[2]}\n\n"
+                    f"💳 Получено: +{credits} CR\n"
+                    f"⭐ Получено: +{xp} XP\n\n"
+                    "Новое задание станет доступно после недельного интервала."
+                ),
+            )
+        except Exception:
+            pass
+        await message.answer(f"✅ Задание #{quest_id} принято. Награда начислена один раз.")
+
+    async def reject_quest(message, quest_id):
+        if message.peer_id != ADMIN_CHAT_ID or not await has_admin_role(message.from_id, "moderator"):
             return
         quest = await get_quest_by_id(quest_id)
         if not quest:
@@ -229,13 +258,50 @@ def register_quest_handlers(bot, deps):
         character = await get_character_by_id(quest[1])
         await update_quest_status(quest_id, "rejected")
         if character:
-            await bot.api.messages.send(
-                peer_id=character[1], random_id=0,
-                message=(
-                    "🔴 ОТЧЁТ ПО ЗАДАНИЮ ОТКЛОНЁН\n"
-                    f"{sci_line()}\n\n"
-                    f"📌 {quest[2]}\n\n"
-                    "Исправьте отчёт и отправьте его повторно командой /отчёт текст."
-                ),
-            )
+            try:
+                await bot.api.messages.send(
+                    peer_id=character[1], random_id=0,
+                    message=(
+                        "🔴 ОТЧЁТ ПО ЗАДАНИЮ ОТКЛОНЁН\n"
+                        f"{sci_line()}\n\n"
+                        f"📌 {quest[2]}\n\n"
+                        "Исправьте отчёт и отправьте его повторно командой /отчёт текст."
+                    ),
+                )
+            except Exception:
+                pass
         await message.answer(f"❌ Отчёт по заданию #{quest_id} отклонён.")
+
+    @bot.on.message(text="/принятьзадание <quest_id>")
+    async def approve_quest_handler(message, quest_id=None):
+        try:
+            quest_id = int(quest_id)
+        except (TypeError, ValueError):
+            await message.answer("Использование: /принятьзадание ID")
+            return
+        await approve_quest(message, quest_id)
+
+    @bot.on.message(text="/отклонитьзадание <quest_id>")
+    async def reject_quest_handler(message, quest_id=None):
+        try:
+            quest_id = int(quest_id)
+        except (TypeError, ValueError):
+            await message.answer("Использование: /отклонитьзадание ID")
+            return
+        await reject_quest(message, quest_id)
+
+    @bot.on.message(text="✅ Принять задание <quest_id>")
+    async def approve_quest_button(message, quest_id=None):
+        try:
+            quest_id = int(quest_id)
+        except (TypeError, ValueError):
+            return
+        await approve_quest(message, quest_id)
+
+    @bot.on.message(text="❌ Отклонить задание <quest_id>")
+    async def reject_quest_button(message, quest_id=None):
+        try:
+            quest_id = int(quest_id)
+        except (TypeError, ValueError):
+            return
+        await reject_quest(message, quest_id)
