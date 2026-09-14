@@ -504,5 +504,201 @@
         "local_image": "tools/05_welder.png"
       }
     ]
+  },
+  "furniture": {
+    "title": "🪑 Интерьер каюты",
+    "items": [
+      {
+        "code": "standard_living_module",
+        "name": "Комплект «Стандартный жилой модуль»",
+        "price": 650,
+        "rarity": "⚪ Обычный",
+        "category": "furniture",
+        "description": "Базовый жилой набор станции: компактная зона отдыха, встроенные системы хранения и нейтральная отделка. Занимает жилую зону каюты.",
+        "interior_set": true,
+        "housing_slots": [
+          "living"
+        ],
+        "min_housing_class": "V",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "station_minimalism",
+        "name": "Комплект «Станционный минимализм»",
+        "price": 900,
+        "rarity": "⚪ Обычный",
+        "category": "furniture",
+        "description": "Лаконичная модульная мебель в станционном стиле: чистые линии, металлические панели и максимум практичности.",
+        "interior_set": true,
+        "housing_slots": [
+          "main"
+        ],
+        "min_housing_class": "V",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "warm_light_contour",
+        "name": "Комплект «Тёплый световой контур»",
+        "price": 550,
+        "rarity": "⚪ Обычный",
+        "category": "furniture",
+        "description": "Набор мягкого регулируемого освещения, делающий стандартный жилой модуль заметно уютнее.",
+        "interior_set": true,
+        "housing_slots": [
+          "lighting"
+        ],
+        "min_housing_class": "V",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "colonial_decor",
+        "name": "Комплект «Колониальный уют»",
+        "price": 800,
+        "rarity": "⚪ Обычный",
+        "category": "furniture",
+        "description": "Небольшой декоративный набор с растениями, текстилем и памятными элементами колониального быта.",
+        "interior_set": true,
+        "housing_slots": [
+          "decor"
+        ],
+        "min_housing_class": "V",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "service_workspace",
+        "name": "Комплект «Служебная рабочая зона»",
+        "price": 1200,
+        "rarity": "⚪ Обычный",
+        "category": "furniture",
+        "description": "Рабочий терминал, компактный стол и организационные модули для тех, кто часто продолжает работу после смены.",
+        "interior_set": true,
+        "housing_slots": [
+          "work"
+        ],
+        "min_housing_class": "V",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "neon_night",
+        "name": "Комплект «Неоновая ночь»",
+        "price": 1400,
+        "rarity": "🟢 Необычный",
+        "category": "furniture",
+        "description": "Контурное неоновое освещение с программируемыми сценариями яркости и цвета. Косметический интерьерный комплект.",
+        "interior_set": true,
+        "housing_slots": [
+          "lighting"
+        ],
+        "min_housing_class": "IV",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "expedition_gallery",
+        "name": "Комплект «Экспедиционная галерея»",
+        "price": 1800,
+        "rarity": "🟢 Необычный",
+        "category": "furniture",
+        "description": "Витрины, крепления и настенные панели для карт, фотографий, жетонов и безопасных трофеев из экспедиций.",
+        "interior_set": true,
+        "housing_slots": [
+          "decor"
+        ],
+        "min_housing_class": "IV",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "industrial_tech",
+        "name": "Комплект «Индустриальный техноконтур»",
+        "price": 3200,
+        "rarity": "🟢 Необычный",
+        "category": "furniture",
+        "description": "Тяжёлая модульная мебель, инструментальные панели и техническая рабочая зона. Занимает сразу основную и рабочую зоны.",
+        "interior_set": true,
+        "housing_slots": [
+          "main",
+          "work"
+        ],
+        "min_housing_class": "IV",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "helios_research",
+        "name": "Комплект «HELIOS Research»",
+        "price": 4800,
+        "rarity": "🔵 Редкий",
+        "category": "furniture",
+        "description": "Исследовательский интерьер HELIOS Dynamics: аналитический терминал, холодное рабочее освещение и закрытые технологические модули.",
+        "interior_set": true,
+        "housing_slots": [
+          "work",
+          "lighting"
+        ],
+        "min_housing_class": "III",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "officer_interior",
+        "name": "Комплект «Офицерский интерьер»",
+        "price": 5500,
+        "rarity": "🔵 Редкий",
+        "category": "furniture",
+        "description": "Строгая представительская мебель и статусный декор для просторных жилых модулей. Занимает основную мебель и декор.",
+        "interior_set": true,
+        "housing_slots": [
+          "main",
+          "decor"
+        ],
+        "min_housing_class": "II",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      },
+      {
+        "code": "heliosphere_luxury",
+        "name": "Комплект «Гелиосфера»",
+        "price": 7500,
+        "rarity": "🟣 Элитный",
+        "category": "furniture",
+        "description": "Премиальный жилой интерьер с расширенной зоной отдыха и дорогой модульной мебелью. Занимает жилую и основную зоны.",
+        "interior_set": true,
+        "housing_slots": [
+          "living",
+          "main"
+        ],
+        "min_housing_class": "II",
+        "usable": false,
+        "consumable": false,
+        "transferable": true,
+        "destroyable": true
+      }
+    ]
   }
 }

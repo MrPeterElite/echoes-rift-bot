@@ -6,6 +6,7 @@ SHOP_CATEGORIES = {
     "🍽 Продовольствие": "food",
     "💊 Медикаменты": "medicine",
     "🛠 Инструменты": "tools",
+    "🪑 Интерьер каюты": "furniture",
 }
 
 
@@ -28,11 +29,27 @@ def get_items_by_category(category_code):
 
 
 def format_item(item, index, total, sci_line):
+    extra = ""
+    if item.get("interior_set"):
+        slot_names = {
+            "living": "🛏 Жилая зона",
+            "work": "🖥 Рабочая зона",
+            "main": "🛋 Основная мебель",
+            "lighting": "💡 Освещение",
+            "decor": "🖼 Декор",
+        }
+        slots = ", ".join(slot_names.get(slot, slot) for slot in item.get("housing_slots", []))
+        extra = (
+            f"\n🧩 Слоты: {slots or '—'}"
+            f"\n🏠 Минимальный класс: {item.get('min_housing_class', 'V')}"
+        )
+
     return (
         f"{item.get('rarity', '⚪ Обычный')}\n"
         f"{item['name']}\n"
         f"{sci_line()}\n\n"
-        f"💳 Цена: {item['price']} CR\n\n"
+        f"💳 Цена: {item['price']} CR"
+        f"{extra}\n\n"
         f"{item.get('description', '')}\n\n"
         f"Товар {index + 1} из {total}"
     )
@@ -59,6 +76,7 @@ def register_shop_handlers(bot, deps):
         .add(Text("💊 Медикаменты"), color=KeyboardButtonColor.POSITIVE)
         .row()
         .add(Text("🛠 Инструменты"), color=KeyboardButtonColor.PRIMARY)
+        .add(Text("🪑 Интерьер каюты"), color=KeyboardButtonColor.PRIMARY)
         .row()
         .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
     )
@@ -180,7 +198,7 @@ def register_shop_handlers(bot, deps):
             "Набор инструментов": "🪛",
             "Плазменный резак": "🔥",
             "Сварочный аппарат": "⚡",
-        }.get(item["name"], "🎒")
+        }.get(item["name"], "🪑" if item.get("category") == "furniture" else "🎒")
 
         quantity_text = f" ×{quantity}" if quantity > 1 else ""
         await message.answer(

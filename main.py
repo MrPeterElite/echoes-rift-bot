@@ -36,6 +36,11 @@ from database import (
     update_housing_sector,
     update_housing_class,
     update_housing_payment,
+    get_housing_interiors,
+    install_housing_interior,
+    remove_housing_interior,
+    update_housing_description,
+    update_housing_visibility,
     subtract_balance,
     ensure_location_tables,
     get_all_locations,
@@ -61,7 +66,12 @@ from systems.characters import register_characters_handlers
 from systems.careers import register_careers_handlers
 from systems.economy import register_economy_handlers
 from systems.locations import register_locations_handlers
-from systems.housing import register_housing_handlers
+from systems.housing import (
+    register_housing_handlers,
+    handle_housing_command,
+    HOUSING_CLASS_CAPACITY,
+    get_used_slots,
+)
 from systems.factions import register_factions_handlers
 from systems.rp import handle_rp_command
 from systems.inventory import register_inventory_handlers
@@ -136,6 +146,8 @@ main_menu = (
 housing_menu = (
     Keyboard(one_time=False)
     .add(Text("🏠 Моя каюта"), color=KeyboardButtonColor.PRIMARY)
+    .add(Text("🛋 Интерьер"), color=KeyboardButtonColor.POSITIVE)
+    .row()
     .add(Text("💳 Оплатить аренду"), color=KeyboardButtonColor.POSITIVE)
     .row()
     .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
@@ -595,11 +607,21 @@ register_locations_handlers(
     }
 )
 
-register_housing_handlers(
+HOUSING_RUNTIME = register_housing_handlers(
     bot,
     {
+        "Keyboard": Keyboard,
+        "KeyboardButtonColor": KeyboardButtonColor,
+        "Text": Text,
         "get_character_by_user": get_character_by_user,
+        "get_character_by_id": get_character_by_id,
         "get_housing": get_housing,
+        "get_housing_interiors": get_housing_interiors,
+        "install_housing_interior": install_housing_interior,
+        "remove_housing_interior": remove_housing_interior,
+        "update_housing_description": update_housing_description,
+        "update_housing_visibility": update_housing_visibility,
+        "get_inventory": get_inventory,
         "HOUSING_NAMES": HOUSING_NAMES,
         "sci_line": sci_line,
         "housing_menu": housing_menu,
@@ -639,6 +661,9 @@ async def router_handler(message: Message):
     text = message.text or ""
 
     if await handle_shop_command(message, SHOP_DEPS):
+        return
+
+    if await handle_housing_command(message, HOUSING_RUNTIME):
         return
 
     if text.lower().strip().startswith("/старт"):
@@ -990,6 +1015,21 @@ async def router_handler(message: Message):
                 await message.answer("Квента не найдена.")
                 return
 
+            current_housing = await get_housing(character_id)
+            if current_housing:
+                interiors = await get_housing_interiors(character_id)
+                used_slots = len(set(get_used_slots(interiors)))
+                new_capacity = HOUSING_CLASS_CAPACITY.get(housing_class, 1)
+                if used_slots > new_capacity:
+                    await message.answer(
+                        "⛔ НЕЛЬЗЯ НАЗНАЧИТЬ ЭТОТ КЛАСС\n"
+                        f"{sci_line()}\n\n"
+                        f"Интерьер уже занимает {used_slots} слотов, "
+                        f"а класс {housing_class} допускает только {new_capacity}.\n"
+                        "Сначала необходимо снять часть комплектов."
+                    )
+                    return
+
             await assign_housing(character_id, housing_class, sector)
 
             await bot.api.messages.send(
@@ -1033,7 +1073,7 @@ async def router_handler(message: Message):
                 await message.answer("Квента не найдена.")
                 return
 
-            await remove_housing(character_id)
+            returned_sets = await remove_housing(character_id)
 
             await bot.api.messages.send(
                 peer_id=character[1],
@@ -1041,11 +1081,15 @@ async def router_handler(message: Message):
                 message=(
                     "🔴 ЖИЛОЙ МОДУЛЬ ИЗЪЯТ\n"
                     f"{sci_line()}\n\n"
-                    "Администрация изъяла вашу каюту."
+                    "Администрация изъяла вашу каюту.\n"
+                    f"📦 Возвращено комплектов в инвентарь: {returned_sets}"
                 )
             )
 
-            await message.answer(f"🏠 Каюта квенты #{character_id} изъята.")
+            await message.answer(
+                f"🏠 Каюта квенты #{character_id} изъята. "
+                f"В инвентарь возвращено комплектов: {returned_sets}."
+            )
             return
 
         if text.startswith("/переселить "):
@@ -1122,6 +1166,19 @@ async def router_handler(message: Message):
 
             if not housing:
                 await message.answer("У персонажа ещё нет каюты.")
+                return
+
+            interiors = await get_housing_interiors(character_id)
+            used_slots = len(set(get_used_slots(interiors)))
+            new_capacity = HOUSING_CLASS_CAPACITY.get(housing_class, 1)
+            if used_slots > new_capacity:
+                await message.answer(
+                    "⛔ НЕЛЬЗЯ ПОНИЗИТЬ КЛАСС ЖИЛЬЯ\n"
+                    f"{sci_line()}\n\n"
+                    f"Сейчас интерьер занимает {used_slots} слотов.\n"
+                    f"Новый класс допускает только {new_capacity}.\n"
+                    "Сначала владелец должен снять часть комплектов."
+                )
                 return
 
             await update_housing_class(character_id, housing_class)

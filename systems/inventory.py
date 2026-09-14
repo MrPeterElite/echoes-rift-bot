@@ -7,6 +7,7 @@ CATEGORIES = {
     "food": "🍽 Продовольствие",
     "medicine": "💊 Медикаменты",
     "tools": "🛠 Инструменты",
+    "furniture": "🪑 Интерьер каюты",
 }
 
 
@@ -148,6 +149,9 @@ def register_inventory_handlers(bot, deps):
             character_id, quantity = int(character_id), int(quantity)
         except (TypeError, ValueError):
             await message.answer("Использование: /передатьпредмет ID номер количество")
+            return
+        if quantity <= 0:
+            await message.answer("Количество должно быть больше нуля.")
             return
         receiver = await get_character_by_id(character_id)
         if not receiver:

@@ -109,6 +109,25 @@ async def get_user(user_id):
 async def reset_user(user_id):
     db = await connect()
 
+    cursor = await db.execute(
+        "SELECT id FROM characters WHERE user_id = ?",
+        (user_id,)
+    )
+    character_ids = [row[0] for row in await cursor.fetchall()]
+
+    for character_id in character_ids:
+        # Удаляем состояние персонажа, чтобы новая квента не наследовала
+        # старое жильё, интерьер, инвентарь, задания или локацию.
+        for table in ("housing_interior_slots", "housing_interiors", "housing", "inventory", "weekly_quests", "character_locations"):
+            try:
+                await db.execute(
+                    f"DELETE FROM {table} WHERE character_id = ?",
+                    (character_id,)
+                )
+            except aiosqlite.OperationalError:
+                # Старые базы могут ещё не иметь одну из таблиц.
+                pass
+
     await db.execute("DELETE FROM characters WHERE user_id = ?", (user_id,))
     await db.execute(
         "UPDATE users SET balance = 1500, xp = 0, level = 1 WHERE user_id = ?",
@@ -301,8 +320,47 @@ async def ensure_housing_tables():
         housing_class TEXT,
         sector TEXT,
         weekly_rent INTEGER DEFAULT 0,
-        last_payment_time INTEGER DEFAULT 0
+        last_payment_time INTEGER DEFAULT 0,
+        description TEXT DEFAULT '',
+        visibility TEXT DEFAULT 'public'
     )
+    """)
+
+    # Мягкая миграция для уже существующих баз проекта.
+    cursor = await db.execute("PRAGMA table_info(housing)")
+    columns = {row[1] for row in await cursor.fetchall()}
+    if "description" not in columns:
+        await db.execute("ALTER TABLE housing ADD COLUMN description TEXT DEFAULT ''")
+    if "visibility" not in columns:
+        await db.execute("ALTER TABLE housing ADD COLUMN visibility TEXT DEFAULT 'public'")
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS housing_interiors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        character_id INTEGER NOT NULL,
+        set_code TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        installed_at INTEGER DEFAULT 0
+    )
+    """)
+
+    await db.execute("""
+    CREATE INDEX IF NOT EXISTS idx_housing_interiors_character
+    ON housing_interiors(character_id)
+    """)
+
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS housing_interior_slots (
+        interior_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        slot TEXT NOT NULL,
+        UNIQUE(character_id, slot)
+    )
+    """)
+
+    await db.execute("""
+    CREATE INDEX IF NOT EXISTS idx_housing_interior_slots_interior
+    ON housing_interior_slots(interior_id)
     """)
 
     await db.commit()
@@ -310,6 +368,7 @@ async def ensure_housing_tables():
 
 
 async def get_housing(character_id):
+    await ensure_housing_tables()
     db = await connect()
 
     cursor = await db.execute(
@@ -323,43 +382,84 @@ async def get_housing(character_id):
 
 
 async def assign_housing(character_id, housing_class, sector):
+    await ensure_housing_tables()
     weekly_rent = HOUSING_PRICES.get(housing_class, 0)
 
     db = await connect()
 
-    await db.execute("""
-        INSERT OR REPLACE INTO housing (
-            character_id, housing_class, sector, weekly_rent, last_payment_time
-        )
-        VALUES (
-            ?,
-            ?,
-            ?,
-            ?,
-            COALESCE(
-                (SELECT last_payment_time FROM housing WHERE character_id = ?),
-                0
+    # UPDATE + INSERT вместо INSERT OR REPLACE: так новые поля Кают 2.0
+    # (описание/публичность) не сбрасываются при повторной выдаче жилья.
+    cursor = await db.execute(
+        "SELECT character_id FROM housing WHERE character_id = ?",
+        (character_id,)
+    )
+    exists = await cursor.fetchone()
+
+    if exists:
+        await db.execute("""
+            UPDATE housing
+            SET housing_class = ?, sector = ?, weekly_rent = ?
+            WHERE character_id = ?
+        """, (housing_class, sector, weekly_rent, character_id))
+    else:
+        await db.execute("""
+            INSERT INTO housing (
+                character_id, housing_class, sector, weekly_rent,
+                last_payment_time, description, visibility
             )
-        )
-    """, (character_id, housing_class, sector, weekly_rent, character_id))
+            VALUES (?, ?, ?, ?, 0, '', 'public')
+        """, (character_id, housing_class, sector, weekly_rent))
 
     await db.commit()
     await db.close()
 
 
 async def remove_housing(character_id):
+    """Изъять жильё и безопасно вернуть установленные комплекты в инвентарь."""
+    await ensure_housing_tables()
+    await ensure_inventory_tables()
     db = await connect()
 
-    await db.execute(
-        "DELETE FROM housing WHERE character_id = ?",
-        (character_id,)
-    )
+    try:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute("""
+            SELECT item_name
+            FROM housing_interiors
+            WHERE character_id = ?
+        """, (character_id,))
+        rows = await cursor.fetchall()
 
-    await db.commit()
-    await db.close()
+        for (item_name,) in rows:
+            await db.execute("""
+                INSERT INTO inventory (character_id, category, item_name, quantity)
+                VALUES (?, 'furniture', ?, 1)
+                ON CONFLICT(character_id, category, item_name)
+                DO UPDATE SET quantity = quantity + 1
+            """, (character_id, item_name))
+
+        await db.execute(
+            "DELETE FROM housing_interior_slots WHERE character_id = ?",
+            (character_id,)
+        )
+        await db.execute(
+            "DELETE FROM housing_interiors WHERE character_id = ?",
+            (character_id,)
+        )
+        await db.execute(
+            "DELETE FROM housing WHERE character_id = ?",
+            (character_id,)
+        )
+        await db.commit()
+        return len(rows)
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
 
 
 async def update_housing_sector(character_id, sector):
+    await ensure_housing_tables()
     db = await connect()
 
     await db.execute(
@@ -372,6 +472,7 @@ async def update_housing_sector(character_id, sector):
 
 
 async def update_housing_class(character_id, housing_class):
+    await ensure_housing_tables()
     weekly_rent = HOUSING_PRICES.get(housing_class, 0)
 
     db = await connect()
@@ -387,6 +488,7 @@ async def update_housing_class(character_id, housing_class):
 
 
 async def update_housing_payment(character_id, timestamp):
+    await ensure_housing_tables()
     db = await connect()
 
     await db.execute(
@@ -394,6 +496,169 @@ async def update_housing_payment(character_id, timestamp):
         (timestamp, character_id)
     )
 
+    await db.commit()
+    await db.close()
+
+
+async def get_housing_interiors(character_id):
+    await ensure_housing_tables()
+    db = await connect()
+    cursor = await db.execute("""
+        SELECT id, set_code, item_name, installed_at
+        FROM housing_interiors
+        WHERE character_id = ?
+        ORDER BY installed_at, id
+    """, (character_id,))
+    rows = await cursor.fetchall()
+    await db.close()
+    return rows
+
+
+async def install_housing_interior(character_id, set_code, item_name, timestamp, slots, max_slots):
+    """Атомарно перенести комплект из инвентаря и занять его интерьерные слоты."""
+    await ensure_housing_tables()
+    await ensure_inventory_tables()
+    slots = list(dict.fromkeys(slots or []))
+    if not slots:
+        return False, "invalid_slots"
+
+    db = await connect()
+
+    try:
+        # BEGIN IMMEDIATE сериализует конкурирующие установки в SQLite:
+        # две одновременные команды не смогут занять один слот или превысить лимит.
+        await db.execute("BEGIN IMMEDIATE")
+
+        cursor = await db.execute("""
+            SELECT COUNT(*)
+            FROM housing_interior_slots
+            WHERE character_id = ?
+        """, (character_id,))
+        used_slots = (await cursor.fetchone())[0]
+        if used_slots + len(slots) > max_slots:
+            await db.rollback()
+            return False, "capacity"
+
+        placeholders = ",".join("?" for _ in slots)
+        cursor = await db.execute(
+            f"""
+            SELECT slot
+            FROM housing_interior_slots
+            WHERE character_id = ? AND slot IN ({placeholders})
+            LIMIT 1
+            """,
+            (character_id, *slots)
+        )
+        if await cursor.fetchone():
+            await db.rollback()
+            return False, "slot_conflict"
+
+        cursor = await db.execute("""
+            SELECT id, quantity
+            FROM inventory
+            WHERE character_id = ?
+              AND category = 'furniture'
+              AND lower(item_name) = lower(?)
+              AND quantity > 0
+            LIMIT 1
+        """, (character_id, item_name))
+        row = await cursor.fetchone()
+        if not row:
+            await db.rollback()
+            return False, "not_found"
+
+        item_id, quantity = row
+        cursor = await db.execute("""
+            INSERT INTO housing_interiors (character_id, set_code, item_name, installed_at)
+            VALUES (?, ?, ?, ?)
+        """, (character_id, set_code, item_name, timestamp))
+        interior_id = cursor.lastrowid
+
+        for slot in slots:
+            await db.execute("""
+                INSERT INTO housing_interior_slots (interior_id, character_id, slot)
+                VALUES (?, ?, ?)
+            """, (interior_id, character_id, slot))
+
+        if quantity == 1:
+            await db.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
+        else:
+            await db.execute(
+                "UPDATE inventory SET quantity = quantity - 1 WHERE id = ?",
+                (item_id,)
+            )
+
+        await db.commit()
+        return True, "ok"
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+
+async def remove_housing_interior(character_id, interior_id):
+    """Атомарно снять комплект и вернуть его в обычный инвентарь."""
+    await ensure_housing_tables()
+    await ensure_inventory_tables()
+    db = await connect()
+
+    try:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute("""
+            SELECT item_name
+            FROM housing_interiors
+            WHERE id = ? AND character_id = ?
+        """, (interior_id, character_id))
+        row = await cursor.fetchone()
+        if not row:
+            await db.rollback()
+            return False, "not_found", None
+
+        item_name = row[0]
+        await db.execute(
+            "DELETE FROM housing_interior_slots WHERE interior_id = ? AND character_id = ?",
+            (interior_id, character_id)
+        )
+        await db.execute(
+            "DELETE FROM housing_interiors WHERE id = ? AND character_id = ?",
+            (interior_id, character_id)
+        )
+        await db.execute("""
+            INSERT INTO inventory (character_id, category, item_name, quantity)
+            VALUES (?, 'furniture', ?, 1)
+            ON CONFLICT(character_id, category, item_name)
+            DO UPDATE SET quantity = quantity + 1
+        """, (character_id, item_name))
+        await db.commit()
+        return True, "ok", item_name
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+
+async def update_housing_description(character_id, description):
+    await ensure_housing_tables()
+    db = await connect()
+    await db.execute(
+        "UPDATE housing SET description = ? WHERE character_id = ?",
+        (description, character_id)
+    )
+    await db.commit()
+    await db.close()
+
+
+async def update_housing_visibility(character_id, visibility):
+    await ensure_housing_tables()
+    if visibility not in {"public", "private"}:
+        raise ValueError("Unsupported housing visibility")
+    db = await connect()
+    await db.execute(
+        "UPDATE housing SET visibility = ? WHERE character_id = ?",
+        (visibility, character_id)
+    )
     await db.commit()
     await db.close()
 
@@ -759,6 +1024,8 @@ async def add_inventory_item(character_id, category, item_name, quantity):
 
 
 async def remove_inventory_item(character_id, item_name, quantity):
+    if quantity <= 0:
+        return False, "invalid_quantity"
     await ensure_inventory_tables()
     db = await connect()
 
@@ -819,6 +1086,8 @@ async def find_inventory_item(character_id, item_name):
 
 
 async def transfer_inventory_item(from_character_id, to_character_id, item_name, quantity):
+    if quantity <= 0:
+        return False, "invalid_quantity"
     item = await find_inventory_item(from_character_id, item_name)
 
     if not item:
