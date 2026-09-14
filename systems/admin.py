@@ -977,14 +977,106 @@ def register_admin_handlers(bot, deps):
         sessions[message.from_id] = {"mode": "delete_reason", "character_id": character_id}
         await message.answer(f"⚠️ Подготовлено удаление #{character_id} — {character[2]}.\nВведите причину удаления.")
 
+    def normalize_admin_button_text(value):
+        """Нормализует текст кнопок VK перед ручной диспетчеризацией.
+
+        VK/клиенты могут по-разному передавать variation selector у emoji,
+        а в беседе иногда к тексту добавляется упоминание сообщества.
+        """
+        text = (value or "").strip().replace("\ufe0f", "")
+        if text.startswith("[club") and "]" in text:
+            text = text.split("]", 1)[1].strip()
+        return " ".join(text.split())
+
+    # Резервный роутинг админ-кнопок. Точные @bot.on.message(text=...)
+    # остаются для обычного пути, а этот словарь ловит клики, которые VK/VKBottle
+    # не сопоставил с VBMLRule и которые дошли до общего router_handler.
+    admin_button_handlers = {
+        normalize_admin_button_text("⬅️ Админ-панель"): admin_back_handler,
+        normalize_admin_button_text("✖️ Закрыть админ-панель"): admin_close_handler,
+        normalize_admin_button_text("👤 Управление игроком"): admin_player_start,
+        normalize_admin_button_text("⬅️ К игроку"): admin_player_back,
+        normalize_admin_button_text("💼 Карьера игрока"): player_career_menu,
+        normalize_admin_button_text("📂 Назначить отдел"): choose_department,
+        normalize_admin_button_text("⬆️ Повысить игрока"): promote_player,
+        normalize_admin_button_text("⬇️ Понизить игрока"): demote_player,
+        normalize_admin_button_text("🚪 Уволить игрока"): fire_player,
+        normalize_admin_button_text("🏛 Фракция игрока"): faction_menu,
+        normalize_admin_button_text("⬆️ Повысить ранг"): promote_faction,
+        normalize_admin_button_text("⬇️ Понизить ранг"): demote_faction,
+        normalize_admin_button_text("💳 Финансы игрока"): finance_player_menu,
+        normalize_admin_button_text("➕ Выдать CR"): finance_action_start,
+        normalize_admin_button_text("➖ Списать CR"): finance_action_start,
+        normalize_admin_button_text("🧾 Установить баланс"): finance_action_start,
+        normalize_admin_button_text("🏠 Жильё игрока"): housing_player_menu,
+        normalize_admin_button_text("🏠 Выдать/изменить каюту"): housing_assign_start,
+        normalize_admin_button_text("🗑 Изъять каюту"): housing_remove_action,
+        normalize_admin_button_text("🔇 Наказания игрока"): punishment_player_menu,
+        normalize_admin_button_text("🔇 Выдать мут"): mute_button_start,
+        normalize_admin_button_text("🔊 Снять мут"): unmute_button,
+        normalize_admin_button_text("🗑 Удалить квенту"): delete_quest_button,
+        normalize_admin_button_text("✅ ПОДТВЕРДИТЬ УДАЛЕНИЕ"): delete_confirm,
+        normalize_admin_button_text("❌ ОТМЕНИТЬ УДАЛЕНИЕ"): delete_cancel,
+        normalize_admin_button_text("🎁 Промокоды"): promo_menu_handler,
+        normalize_admin_button_text("➕ Создать промокод"): promo_create_start,
+        normalize_admin_button_text("💳 Добавить CR"): promo_add_cr_start,
+        normalize_admin_button_text("🎒 Добавить предмет"): promo_add_item_start,
+        normalize_admin_button_text("✅ Создать промокод"): promo_finish,
+        normalize_admin_button_text("❌ Отмена промокода"): promo_cancel,
+        normalize_admin_button_text("📋 Список промокодов"): promo_list_handler,
+        normalize_admin_button_text("⛔ Отключить промокод"): promo_disable_start,
+        normalize_admin_button_text("💡 Предложения"): suggestions_admin_list,
+        normalize_admin_button_text("✅ Отметить рассмотренным"): suggestion_done,
+        normalize_admin_button_text("❌ Отклонить предложение"): suggestion_reject,
+        normalize_admin_button_text("💬 Ответить игроку"): suggestion_reply_start,
+        normalize_admin_button_text("📜 Квенты на проверке"): pending_characters_handler,
+        normalize_admin_button_text("📌 Отчёты на проверке"): pending_quests_handler,
+        normalize_admin_button_text("💳 Админ-экономика"): admin_economy_help,
+        normalize_admin_button_text("👥 Администраторы"): admins_list_handler,
+    }
+
     async def handle_admin_message(message):
-        """Обрабатывает свободный ввод внутри пошаговой админ-панели."""
+        """Обрабатывает кнопки и свободный ввод пошаговой админ-панели."""
         if message.peer_id != ADMIN_CHAT_ID:
             return False
         role = await admin_role(message.from_id)
         if not role:
             return False
-        text = (message.text or "").strip()
+
+        raw_text = (message.text or "").strip()
+        text = normalize_admin_button_text(raw_text)
+
+        # Сначала ловим статические кнопки панели. Это резервный путь для
+        # сообщений, которые не были пойманы точными VBML-правилами выше.
+        handler = admin_button_handlers.get(text)
+        if handler is not None:
+            # finance_action_start использует message.text как ключ. При
+            # отсутствии variation selector подберём режим по нормализованному тексту.
+            if handler is finance_action_start:
+                session = sessions.get(message.from_id, {})
+                if not session.get("character_id"):
+                    await message.answer("Сначала выберите игрока.")
+                    return True
+                finance_modes = {
+                    normalize_admin_button_text("➕ Выдать CR"): "finance_add",
+                    normalize_admin_button_text("➖ Списать CR"): "finance_subtract",
+                    normalize_admin_button_text("🧾 Установить баланс"): "finance_set",
+                }
+                session["mode"] = finance_modes[text]
+                await message.answer("Введите сумму CR целым числом.")
+                return True
+            await handler(message)
+            return True
+
+        # Динамическая кнопка предложения: «💡 Открыть #123».
+        if text.startswith(normalize_admin_button_text("💡 Открыть #")):
+            try:
+                suggestion_id = int(text.rsplit("#", 1)[1])
+            except (IndexError, ValueError):
+                return False
+            await suggestion_open_button(message, suggestion_id)
+            return True
+
         session = sessions.get(message.from_id)
         if not session:
             return False
