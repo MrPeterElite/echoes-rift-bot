@@ -5,8 +5,9 @@ import os
 import asyncio
 import time
 
+load_dotenv()
+
 from database import (
-    create_tables,
     create_user,
     get_user,
     reset_user,
@@ -15,21 +16,16 @@ from database import (
     get_character_by_id,
     update_character_status,
     get_approved_characters,
-    ensure_career_columns,
     update_character_job,
     update_last_salary,
     add_balance,
-    ensure_faction_rank_columns,
     update_faction_rank,
-    ensure_quest_tables,
     get_current_quest,
     get_last_quest,
     create_weekly_quest,
     submit_quest_report,
     get_quest_by_id,
     update_quest_status,
-    add_xp,
-    ensure_housing_tables,
     get_housing,
     assign_housing,
     remove_housing,
@@ -42,7 +38,6 @@ from database import (
     update_housing_description,
     update_housing_visibility,
     subtract_balance,
-    ensure_location_tables,
     get_all_locations,
     get_location_by_code,
     get_location_by_peer,
@@ -50,17 +45,13 @@ from database import (
     set_character_location,
     transfer_balance,
     get_top_richest,
-    get_character_user_id,
     set_balance,
     get_characters_in_location,
-    ensure_inventory_tables,
     get_inventory,
     add_inventory_item,
     remove_inventory_item,
     find_inventory_item,
     transfer_inventory_item,
-    update_character_arts,
-    ensure_core_update_tables,
     ensure_owner_admin,
     get_bot_admin,
     list_bot_admins,
@@ -73,8 +64,6 @@ from database import (
     delete_character_by_admin,
     create_promo_code,
     add_promo_reward,
-    get_promo_by_code,
-    get_promo_rewards,
     list_promo_codes,
     set_promo_active,
     redeem_promo_code,
@@ -89,6 +78,10 @@ from database import (
 )
 
 from systems.characters import register_characters_handlers
+from systems.dispatch import SerialMessageView
+from systems.legacy_admin import build_legacy_admin_router
+from vkbottle.framework.labeler import BotLabeler
+from stability import initialize_database
 from systems.careers import register_careers_handlers
 from systems.economy import register_economy_handlers
 from systems.locations import register_locations_handlers
@@ -105,10 +98,10 @@ from systems.shop import register_shop_handlers, handle_shop_command
 from systems.quests import register_quest_handlers
 from systems.help import register_help_handlers
 from systems.media import stabilize_attachments
-from systems.admin import register_admin_handlers, ROLE_LEVELS
+from systems.admin import register_admin_handlers
 from systems.suggestions import register_suggestion_handlers
 
-load_dotenv()
+
 
 # Токен VK. На разных хостингах он может приходить под разными именами.
 # Некоторые панели сохраняют значение в виде "VK_TOKEN=vk1.a...", поэтому
@@ -157,9 +150,8 @@ BOT_OWNER_ID = int(_owner_raw) if _owner_raw.isdigit() else 0
 if not BOT_OWNER_ID:
     print("[config] WARNING: BOT_OWNER_ID is not configured; admin role system has no owner yet.")
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, labeler=BotLabeler(message_view=SerialMessageView()))
 
-drafts = {}
 archive_users = set()
 
 
@@ -576,6 +568,7 @@ async def peer_handler(message: Message):
 
 @bot.on.message(text=["/старт", "/start", "Начать", "начать"])
 async def start_handler(message: Message):
+    await CHARACTER_RUNTIME["pause_draft"](message)
     await create_user(message.from_id)
     # Сбрасываем незавершённые пошаговые интерфейсы при явном возврате к старту.
     for runtime_name in ("ECONOMY_RUNTIME", "SUGGESTION_RUNTIME"):
@@ -596,6 +589,7 @@ async def start_handler(message: Message):
 
 @bot.on.message(text="⬅️ Назад")
 async def back_handler(message: Message):
+    await CHARACTER_RUNTIME["pause_draft"](message)
     for runtime_name in ("ECONOMY_RUNTIME", "SUGGESTION_RUNTIME"):
         runtime = globals().get(runtime_name)
         if runtime:
@@ -607,13 +601,12 @@ async def back_handler(message: Message):
     )
 
 
-register_characters_handlers(
+CHARACTER_RUNTIME = register_characters_handlers(
     bot,
     {
         "quenta_menu": quenta_menu,
         "sci_line": sci_line,
         "get_character_by_user": get_character_by_user,
-        "drafts": drafts,
         "faction_keyboard": faction_keyboard,
         "FACTION_ARTS": FACTION_ARTS,
         "FACTION_DESCRIPTIONS": FACTION_DESCRIPTIONS,
@@ -827,9 +820,41 @@ register_help_handlers(
 
 
 
+LEGACY_ADMIN_ROUTER = build_legacy_admin_router({
+    "ADMIN_CHAT_ID": ADMIN_CHAT_ID,
+    "ADMIN_RUNTIME": ADMIN_RUNTIME,
+    "DEPARTMENTS": DEPARTMENTS,
+    "DEPARTMENT_CODES_TEXT": DEPARTMENT_CODES_TEXT,
+    "FACTION_RANKS": FACTION_RANKS,
+    "HOUSING_CLASS_CAPACITY": HOUSING_CLASS_CAPACITY,
+    "HOUSING_NAMES": HOUSING_NAMES,
+    "HOUSING_PRICES": HOUSING_PRICES,
+    "SALARY_BY_LEVEL": SALARY_BY_LEVEL,
+    "assign_housing": assign_housing,
+    "bot": bot,
+    "create_user": create_user,
+    "get_character_by_id": get_character_by_id,
+    "get_department_key_by_name": get_department_key_by_name,
+    "get_housing": get_housing,
+    "get_housing_interiors": get_housing_interiors,
+    "get_used_slots": get_used_slots,
+    "get_user": get_user,
+    "remove_housing": remove_housing,
+    "sci_line": sci_line,
+    "update_character_job": update_character_job,
+    "update_character_status": update_character_status,
+    "update_faction_rank": update_faction_rank,
+    "update_housing_class": update_housing_class,
+    "update_housing_sector": update_housing_sector,
+})
+
+
 @bot.on.message()
 async def router_handler(message: Message):
     text = message.text or ""
+
+    if await ADMIN_RUNTIME["handle_legacy_finance"](message):
+        return
 
     # Свободный ввод пошаговых интерфейсов обрабатывается до общего роутинга.
     if await ADMIN_RUNTIME["handle_admin_message"](message):
@@ -881,740 +906,7 @@ async def router_handler(message: Message):
                         pass
                     return
 
-    if message.peer_id == ADMIN_CHAT_ID:
-        # Сам факт нахождения в админ-беседе больше не даёт полномочий.
-        if not await ADMIN_RUNTIME["has_role"](message.from_id, "moderator"):
-            return
-
-        # Старые опасные команды сохранены, но требуют уровня Администратор+.
-        admin_only_prefixes = (
-            "/назначить ", "/повысить ", "/понизить ",
-            "/фповысить ", "/фпонизить ",
-            "/выдатькаюту ", "/забратькаюту ", "/переселить ", "/улучшитькаюту ",
-            "/деньги ", "/снятьденьги ", "/баланс ", "/отделы"
-        )
-        if text.startswith(admin_only_prefixes) and not await ADMIN_RUNTIME["has_role"](message.from_id, "admin"):
-            await message.answer("⛔ Для этой команды требуется роль Администратор или выше.")
-            return
-
-        if text.startswith("/назначить "):
-            parts = text.split()
-
-            if len(parts) < 3:
-                await message.answer(
-                    "Использование:\n"
-                    "/назначить ID отдел\n\n"
-                    "Пример:\n"
-                    "/назначить 1 наука"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("Неверный ID квенты.")
-                return
-
-            department_key = parts[2].lower()
-
-            if department_key not in DEPARTMENTS:
-                await message.answer(
-                    "Неизвестный отдел.\n\n"
-                    "Доступные коды:\n"
-                    "безопасность\n"
-                    "медицина\n"
-                    "наука\n"
-                    "админ\n"
-                    "инженерия\n"
-                    "разведка\n"
-                    "пепел"
-                )
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            department = DEPARTMENTS[department_key]
-            department_name = department["name"]
-            job_title = department["jobs"][0]
-            job_level = 1
-            salary = SALARY_BY_LEVEL[job_level]
-
-            await update_character_job(
-                character_id,
-                department_name,
-                job_title,
-                job_level
-            )
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "📡 КАРЬЕРНОЕ НАЗНАЧЕНИЕ\n"
-                    f"{sci_line()}\n\n"
-                    f"📂 Отдел: {department_name}\n"
-                    f"💼 Должность: {job_title}\n"
-                    f"📈 Уровень: {job_level}\n"
-                    f"💳 Недельная зарплата: {salary} CR\n\n"
-                    "Поздравляем с назначением."
-                )
-            )
-
-            await message.answer(
-                "🟢 НАЗНАЧЕНИЕ ВЫПОЛНЕНО\n"
-                f"{sci_line()}\n\n"
-                f"🆔 Квента: #{character_id}\n"
-                f"📂 Отдел: {department_name}\n"
-                f"💼 Должность: {job_title}\n"
-                f"💳 Зарплата: {salary} CR"
-            )
-            return
-
-        if text.startswith("/повысить "):
-            parts = text.split()
-
-            if len(parts) < 2:
-                await message.answer(
-                    "Использование:\n"
-                    "/повысить ID\n\n"
-                    "Пример:\n"
-                    "/повысить 4"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("Неверный ID квенты.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            department_name = character[11]
-            current_level = character[13] or 0
-
-            if not department_name or current_level == 0:
-                await message.answer(
-                    "Сначала назначьте отдел командой:\n"
-                    "/назначить ID отдел"
-                )
-                return
-
-            department_key = get_department_key_by_name(department_name)
-
-            if not department_key:
-                await message.answer("Не удалось определить отдел.")
-                return
-
-            jobs = DEPARTMENTS[department_key]["jobs"]
-
-            if current_level >= len(jobs):
-                await message.answer("Игрок уже находится на максимальной должности.")
-                return
-
-            new_level = current_level + 1
-            new_job_title = jobs[new_level - 1]
-            salary = SALARY_BY_LEVEL[new_level]
-
-            await update_character_job(
-                character_id,
-                department_name,
-                new_job_title,
-                new_level
-            )
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "⬆️ КАРЬЕРНОЕ ПОВЫШЕНИЕ\n"
-                    f"{sci_line()}\n\n"
-                    f"📂 Отдел: {department_name}\n"
-                    f"💼 Новая должность: {new_job_title}\n"
-                    f"📈 Уровень: {new_level}\n"
-                    f"💳 Недельная зарплата: {salary} CR\n\n"
-                    "Поздравляем с повышением."
-                )
-            )
-
-            await message.answer(
-                "🟢 ПОВЫШЕНИЕ ВЫПОЛНЕНО\n"
-                f"{sci_line()}\n\n"
-                f"🆔 Квента: #{character_id}\n"
-                f"📂 Отдел: {department_name}\n"
-                f"💼 Новая должность: {new_job_title}\n"
-                f"💳 Зарплата: {salary} CR"
-            )
-            return
-
-        if text.startswith("/понизить "):
-            parts = text.split()
-
-            if len(parts) < 2:
-                await message.answer(
-                    "Использование:\n"
-                    "/понизить ID\n\n"
-                    "Пример:\n"
-                    "/понизить 4"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("Неверный ID квенты.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            department_name = character[11]
-            current_level = character[13] or 0
-
-            if not department_name or current_level == 0:
-                await message.answer("У игрока ещё нет назначенной должности.")
-                return
-
-            department_key = get_department_key_by_name(department_name)
-
-            if not department_key:
-                await message.answer("Не удалось определить отдел.")
-                return
-
-            jobs = DEPARTMENTS[department_key]["jobs"]
-
-            if current_level <= 1:
-                await message.answer("Игрок уже находится на минимальной должности.")
-                return
-
-            new_level = current_level - 1
-            new_job_title = jobs[new_level - 1]
-            salary = SALARY_BY_LEVEL[new_level]
-
-            await update_character_job(
-                character_id,
-                department_name,
-                new_job_title,
-                new_level
-            )
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "⬇️ КАРЬЕРНОЕ ПОНИЖЕНИЕ\n"
-                    f"{sci_line()}\n\n"
-                    f"📂 Отдел: {department_name}\n"
-                    f"💼 Новая должность: {new_job_title}\n"
-                    f"📈 Уровень: {new_level}\n"
-                    f"💳 Недельная зарплата: {salary} CR"
-                )
-            )
-
-            await message.answer(
-                "🟠 ПОНИЖЕНИЕ ВЫПОЛНЕНО\n"
-                f"{sci_line()}\n\n"
-                f"🆔 Квента: #{character_id}\n"
-                f"📂 Отдел: {department_name}\n"
-                f"💼 Новая должность: {new_job_title}\n"
-                f"💳 Зарплата: {salary} CR"
-            )
-            return
-
-
-        if text.startswith("/фповысить "):
-            parts = text.split()
-            try:
-                character_id = int(parts[1])
-            except:
-                await message.answer("Использование: /фповысить ID")
-                return
-            character = await get_character_by_id(character_id)
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-            ranks = FACTION_RANKS.get(character[5])
-            current_level = character[16] if len(character) > 16 and character[16] else 0
-            if current_level >= len(ranks):
-                await message.answer("Игрок уже имеет максимальный фракционный ранг.")
-                return
-            new_level = current_level + 1
-            new_rank = ranks[new_level - 1]
-            await update_faction_rank(character_id, new_rank, new_level)
-            await message.answer(f"🎖 Новый ранг: {new_rank}")
-            return
-
-        if text.startswith("/фпонизить "):
-            parts = text.split()
-            try:
-                character_id = int(parts[1])
-            except:
-                await message.answer("Использование: /фпонизить ID")
-                return
-            character = await get_character_by_id(character_id)
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-            ranks = FACTION_RANKS.get(character[5])
-            current_level = character[16] if len(character) > 16 and character[16] else 0
-            if current_level <= 1:
-                await message.answer("Игрок уже находится на минимальном ранге.")
-                return
-            new_level = current_level - 1
-            new_rank = ranks[new_level - 1]
-            await update_faction_rank(character_id, new_rank, new_level)
-            await message.answer(f"🎖 Новый ранг: {new_rank}")
-            return
-
-
-        if text.startswith("/выдатькаюту "):
-            parts = text.split(maxsplit=3)
-
-            if len(parts) < 4:
-                await message.answer(
-                    "Использование:\n"
-                    "/выдатькаюту ID класс сектор\n\n"
-                    "Пример:\n"
-                    "/выдатькаюту 4 V C-12"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("Неверный ID квенты.")
-                return
-
-            housing_class = parts[2].upper()
-            sector = parts[3]
-
-            if housing_class not in HOUSING_PRICES:
-                await message.answer("Класс должен быть: V, IV, III, II или I.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            current_housing = await get_housing(character_id)
-            if current_housing:
-                interiors = await get_housing_interiors(character_id)
-                used_slots = len(set(get_used_slots(interiors)))
-                new_capacity = HOUSING_CLASS_CAPACITY.get(housing_class, 1)
-                if used_slots > new_capacity:
-                    await message.answer(
-                        "⛔ НЕЛЬЗЯ НАЗНАЧИТЬ ЭТОТ КЛАСС\n"
-                        f"{sci_line()}\n\n"
-                        f"Интерьер уже занимает {used_slots} слотов, "
-                        f"а класс {housing_class} допускает только {new_capacity}.\n"
-                        "Сначала необходимо снять часть комплектов."
-                    )
-                    return
-
-            await assign_housing(character_id, housing_class, sector)
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "🏠 ЖИЛОЙ МОДУЛЬ НАЗНАЧЕН\n"
-                    f"{sci_line()}\n\n"
-                    f"🏠 Тип жилья: {HOUSING_NAMES[housing_class]}\n"
-                    f"📍 Сектор: {sector}\n"
-                    f"💳 Аренда: {HOUSING_PRICES[housing_class]} CR / неделя"
-                )
-            )
-
-            await message.answer(
-                "🟢 КАЮТА ВЫДАНА\n"
-                f"{sci_line()}\n\n"
-                f"🆔 Квента: #{character_id}\n"
-                f"🏠 Тип: {HOUSING_NAMES[housing_class]}\n"
-                f"📍 Сектор: {sector}\n"
-                f"💳 Аренда: {HOUSING_PRICES[housing_class]} CR / неделя"
-            )
-            return
-
-        if text.startswith("/забратькаюту "):
-            parts = text.split()
-
-            if len(parts) < 2:
-                await message.answer("Использование:\n/забратькаюту ID")
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("Неверный ID квенты.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            returned_sets = await remove_housing(character_id)
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "🔴 ЖИЛОЙ МОДУЛЬ ИЗЪЯТ\n"
-                    f"{sci_line()}\n\n"
-                    "Администрация изъяла вашу каюту.\n"
-                    f"📦 Возвращено комплектов в инвентарь: {returned_sets}"
-                )
-            )
-
-            await message.answer(
-                f"🏠 Каюта квенты #{character_id} изъята. "
-                f"В инвентарь возвращено комплектов: {returned_sets}."
-            )
-            return
-
-        if text.startswith("/переселить "):
-            parts = text.split(maxsplit=2)
-
-            if len(parts) < 3:
-                await message.answer("Использование:\n/переселить ID сектор")
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("Неверный ID квенты.")
-                return
-
-            character = await get_character_by_id(character_id)
-            housing = await get_housing(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            if not housing:
-                await message.answer("У персонажа ещё нет каюты.")
-                return
-
-            sector = parts[2]
-
-            await update_housing_sector(character_id, sector)
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "📍 ПЕРЕСЕЛЕНИЕ ВЫПОЛНЕНО\n"
-                    f"{sci_line()}\n\n"
-                    f"Новый сектор: {sector}"
-                )
-            )
-
-            await message.answer(f"📍 Квента #{character_id} переселена в сектор {sector}.")
-            return
-
-        if text.startswith("/улучшитькаюту "):
-            parts = text.split()
-
-            if len(parts) < 3:
-                await message.answer(
-                    "Использование:\n"
-                    "/улучшитькаюту ID класс\n\n"
-                    "Пример:\n"
-                    "/улучшитькаюту 4 II"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("Неверный ID квенты.")
-                return
-
-            housing_class = parts[2].upper()
-
-            if housing_class not in HOUSING_PRICES:
-                await message.answer("Класс должен быть: V, IV, III, II или I.")
-                return
-
-            character = await get_character_by_id(character_id)
-            housing = await get_housing(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            if not housing:
-                await message.answer("У персонажа ещё нет каюты.")
-                return
-
-            interiors = await get_housing_interiors(character_id)
-            used_slots = len(set(get_used_slots(interiors)))
-            new_capacity = HOUSING_CLASS_CAPACITY.get(housing_class, 1)
-            if used_slots > new_capacity:
-                await message.answer(
-                    "⛔ НЕЛЬЗЯ ПОНИЗИТЬ КЛАСС ЖИЛЬЯ\n"
-                    f"{sci_line()}\n\n"
-                    f"Сейчас интерьер занимает {used_slots} слотов.\n"
-                    f"Новый класс допускает только {new_capacity}.\n"
-                    "Сначала владелец должен снять часть комплектов."
-                )
-                return
-
-            await update_housing_class(character_id, housing_class)
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "⬆️ КЛАСС ЖИЛЬЯ ИЗМЕНЁН\n"
-                    f"{sci_line()}\n\n"
-                    f"🏠 Новый тип: {HOUSING_NAMES[housing_class]}\n"
-                    f"💳 Аренда: {HOUSING_PRICES[housing_class]} CR / неделя"
-                )
-            )
-
-            await message.answer(
-                f"⬆️ Квента #{character_id}: жильё изменено на {HOUSING_NAMES[housing_class]}."
-            )
-            return
-
-
-        if text.startswith("/деньги "):
-            parts = text.split()
-
-            if len(parts) < 3:
-                await message.answer(
-                    "Использование:\n"
-                    "/деньги ID сумма\n\n"
-                    "Пример:\n"
-                    "/деньги 4 500"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-                amount = int(parts[2])
-            except ValueError:
-                await message.answer("ID и сумма должны быть числами.")
-                return
-
-            if amount <= 0:
-                await message.answer("Сумма должна быть больше 0.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            await create_user(character[1])
-            await add_balance(character[1], amount)
-            user = await get_user(character[1])
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "🟢 НАЧИСЛЕНИЕ КРЕДИТОВ\n"
-                    f"{sci_line()}\n\n"
-                    f"💳 Получено: +{amount} CR\n"
-                    f"💰 Баланс: {user[1]} CR"
-                )
-            )
-
-            await message.answer(
-                "🟢 КРЕДИТЫ НАЧИСЛЕНЫ\n"
-                f"{sci_line()}\n\n"
-                f"🆔 Квента: #{character_id}\n"
-                f"👤 Персонаж: {character[2]}\n"
-                f"💳 Начислено: +{amount} CR\n"
-                f"💰 Баланс: {user[1]} CR"
-            )
-            return
-
-        if text.startswith("/снятьденьги "):
-            parts = text.split()
-
-            if len(parts) < 3:
-                await message.answer(
-                    "Использование:\n"
-                    "/снятьденьги ID сумма\n\n"
-                    "Пример:\n"
-                    "/снятьденьги 4 500"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-                amount = int(parts[2])
-            except ValueError:
-                await message.answer("ID и сумма должны быть числами.")
-                return
-
-            if amount <= 0:
-                await message.answer("Сумма должна быть больше 0.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            await create_user(character[1])
-            user = await get_user(character[1])
-
-            if user[1] < amount:
-                await message.answer(
-                    "У игрока недостаточно средств.\n"
-                    f"Баланс: {user[1]} CR"
-                )
-                return
-
-            await subtract_balance(character[1], amount)
-            updated_user = await get_user(character[1])
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "🔴 СПИСАНИЕ КРЕДИТОВ\n"
-                    f"{sci_line()}\n\n"
-                    f"💳 Списано: -{amount} CR\n"
-                    f"💰 Баланс: {updated_user[1]} CR"
-                )
-            )
-
-            await message.answer(
-                "🔴 КРЕДИТЫ СПИСАНЫ\n"
-                f"{sci_line()}\n\n"
-                f"🆔 Квента: #{character_id}\n"
-                f"👤 Персонаж: {character[2]}\n"
-                f"💳 Списано: -{amount} CR\n"
-                f"💰 Баланс: {updated_user[1]} CR"
-            )
-            return
-
-        if text.startswith("/баланс "):
-            parts = text.split()
-
-            if len(parts) < 2:
-                await message.answer(
-                    "Использование:\n"
-                    "/баланс ID\n\n"
-                    "Пример:\n"
-                    "/баланс 4"
-                )
-                return
-
-            try:
-                character_id = int(parts[1])
-            except ValueError:
-                await message.answer("ID должен быть числом.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            await create_user(character[1])
-            user = await get_user(character[1])
-
-            await message.answer(
-                "◢ ПРОВЕРКА БАЛАНСА ◣\n"
-                f"{sci_line()}\n\n"
-                f"🆔 Квента: #{character_id}\n"
-                f"👤 Персонаж: {character[2]}\n"
-                f"💳 Баланс: {user[1]} CR"
-            )
-            return
-
-        if text.startswith("/отделы"):
-            await message.answer(
-                "◢ КОДЫ ОТДЕЛОВ ◣\n"
-                f"{sci_line()}\n\n"
-                f"{DEPARTMENT_CODES_TEXT}\n\n"
-                "Пример назначения:\n"
-                "/назначить 4 наука"
-            )
-            return
-
-        if "Одобрить #" in text:
-            try:
-                character_id = int(text.split("#")[-1].strip())
-            except ValueError:
-                await message.answer("Неверный номер квенты.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            await update_character_status(character_id, "approved")
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "🟢 ВЕРИФИКАЦИЯ ЗАВЕРШЕНА\n"
-                    f"{sci_line()}\n\n"
-                    "Ваша квента одобрена.\n"
-                    "Доступ к системе Echoes of the Rift открыт."
-                )
-            )
-
-            await message.answer(f"✅ Квента #{character_id} одобрена.")
-            return
-
-        if "Отклонить #" in text:
-            try:
-                character_id = int(text.split("#")[-1].strip())
-            except ValueError:
-                await message.answer("Неверный номер квенты.")
-                return
-
-            character = await get_character_by_id(character_id)
-
-            if not character:
-                await message.answer("Квента не найдена.")
-                return
-
-            await update_character_status(character_id, "rejected")
-
-            await bot.api.messages.send(
-                peer_id=character[1],
-                random_id=0,
-                message=(
-                    "🔴 КВЕНТА ОТКЛОНЕНА\n"
-                    f"{sci_line()}\n\n"
-                    "Администрация отклонила вашу квенту.\n"
-                    "Вы можете удалить персонажа и создать нового."
-                )
-            )
-
-            await message.answer(f"❌ Квента #{character_id} отклонена.")
-            return
-
+    if await LEGACY_ADMIN_ROUTER(message):
         return
 
     if message.from_id in archive_users and text.isdigit():
@@ -1646,90 +938,14 @@ async def router_handler(message: Message):
         )
         return
 
-    user_id = message.from_id
-    draft = drafts.get(user_id)
-
-    if not draft:
-        return
-
-    step = draft["step"]
-
-    if step == "name":
-        draft["name"] = text
-        draft["step"] = "age"
-        await message.answer("Шаг 2/8\nВведите возраст персонажа.")
-        return
-
-    if step == "age":
-        draft["age"] = text
-        draft["step"] = "gender"
-        await message.answer("Шаг 3/8\nВведите пол персонажа.")
-        return
-
-    if step == "gender":
-        draft["gender"] = text
-        draft["step"] = "faction"
-        await message.answer(
-            "Шаг 4/8\nВыберите фракцию персонажа.",
-            keyboard=faction_keyboard.get_json()
-        )
-        return
-
-    if step == "biology":
-        draft["biology"] = text
-        draft["step"] = "personality"
-        await message.answer("Шаг 6/8\nОпишите характер персонажа.")
-        return
-
-    if step == "personality":
-        draft["personality"] = text
-        draft["step"] = "history"
-        await message.answer("Шаг 7/8\nНапишите историю персонажа.")
-        return
-
-    if step == "history":
-        draft["history"] = text
-        draft["step"] = "arts"
-        await message.answer(
-            "Шаг 8/8\n"
-            "Прикрепите от 1 до 3 артов персонажа.\n\n"
-            "Когда закончите — нажмите «✅ Готово».",
-            keyboard=done_arts_keyboard.get_json()
-        )
-        return
-
-    if step == "arts":
-        attachment = get_photo_attachment(message)
-
-        if not attachment:
-            await message.answer("Отправьте именно фото/арт.")
-            return
-
-        if len(draft["arts"]) >= 3:
-            await message.answer(
-                "Лимит — 3 арта.\n"
-                "Нажмите «✅ Готово», чтобы отправить квенту."
-            )
-            return
-
-        draft["arts"].append(attachment)
-
-        await message.answer(
-            f"🖼 Арт принят: {len(draft['arts'])}/3\n\n"
-            "Можете отправить ещё или нажать «✅ Готово».",
-            keyboard=done_arts_keyboard.get_json()
-        )
-        return
+    await CHARACTER_RUNTIME["handle_message"](message)
 
 
-asyncio.run(create_tables())
-asyncio.run(ensure_career_columns())
-asyncio.run(ensure_faction_rank_columns())
-asyncio.run(ensure_quest_tables())
-asyncio.run(ensure_housing_tables())
-asyncio.run(ensure_location_tables())
-asyncio.run(ensure_inventory_tables())
-asyncio.run(ensure_core_update_tables())
-asyncio.run(ensure_owner_admin(BOT_OWNER_ID, int(time.time())))
+async def startup():
+    await initialize_database()
+    await ensure_owner_admin(BOT_OWNER_ID, int(time.time()))
 
-bot.run()
+
+if __name__ == "__main__":
+    asyncio.run(startup())
+    bot.run()

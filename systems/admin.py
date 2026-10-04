@@ -1,5 +1,5 @@
+from database import adjust_balance_by_admin
 import time
-from datetime import datetime, timezone
 
 from systems.shop import load_shop_items
 
@@ -87,9 +87,6 @@ def register_admin_handlers(bot, deps):
     get_character_by_id = deps["get_character_by_id"]
     get_user = deps["get_user"]
     create_user = deps["create_user"]
-    add_balance = deps["add_balance"]
-    subtract_balance = deps["subtract_balance"]
-    set_balance = deps["set_balance"]
     update_character_job = deps["update_character_job"]
     update_faction_rank = deps["update_faction_rank"]
     get_department_key_by_name = deps["get_department_key_by_name"]
@@ -101,7 +98,6 @@ def register_admin_handlers(bot, deps):
     get_housing_interiors = deps["get_housing_interiors"]
     assign_housing = deps["assign_housing"]
     remove_housing = deps["remove_housing"]
-    update_housing_class = deps["update_housing_class"]
     HOUSING_NAMES = deps["HOUSING_NAMES"]
     HOUSING_CLASS_CAPACITY = deps["HOUSING_CLASS_CAPACITY"]
     get_used_slots = deps["get_used_slots"]
@@ -577,7 +573,6 @@ def register_admin_handlers(bot, deps):
         if not cid or not reason or session.get("mode") != "delete_confirm":
             await message.answer("Нет подготовленного удаления.")
             return
-        character = await get_character_by_id(cid)
         ok, user_id, name = await delete_character_by_admin(cid, reset_account=True)
         if not ok:
             await message.answer("Квента уже не существует.")
@@ -587,7 +582,7 @@ def register_admin_handlers(bot, deps):
         try:
             await bot.api.messages.send(
                 peer_id=user_id, random_id=0,
-                message=f"🗑 Ваша квента #{cid} ({name}) удалена администрацией.\nПричина: {reason}\nЭкономика аккаунта сброшена до стартового состояния."
+                message=f"🗑 Ваша квента #{cid} ({name}) удалена администрацией.\nПричина: {reason}\nБаланс восстановлен до 1500 CR; опыт и уровень сброшены."
             )
         except Exception:
             pass
@@ -1035,6 +1030,24 @@ def register_admin_handlers(bot, deps):
         normalize_admin_button_text("👥 Администраторы"): admins_list_handler,
     }
 
+    async def handle_legacy_finance(message):
+        text = (message.text or "").strip()
+        command = text.split(maxsplit=1)[0] if text else ""
+        modes = {"/деньги": "finance_add", "/снятьденьги": "finance_subtract"}
+        if command not in modes:
+            return False
+        if not await require_admin(message, "admin"):
+            return True
+        try:
+            _, cid, amount = text.split()
+            cid, amount = int(cid), int(amount)
+        except ValueError:
+            await message.answer(f"Использование: {command} ID сумма")
+            return True
+        ok, reason = await adjust_balance_by_admin(message.from_id, cid, modes[command], amount, int(time.time()))
+        await message.answer("✅ Финансы обновлены." if ok else "Операция не выполнена: проверьте сумму, персонажа и баланс.")
+        return True
+
     async def handle_admin_message(message):
         """Обрабатывает кнопки и свободный ввод пошаговой админ-панели."""
         if message.peer_id != ADMIN_CHAT_ID:
@@ -1119,18 +1132,10 @@ def register_admin_handlers(bot, deps):
             if amount < 0 or (mode != "finance_set" and amount == 0):
                 await message.answer("Сумма должна быть положительной.")
                 return True
-            await create_user(character[1])
-            if mode == "finance_add":
-                await add_balance(character[1], amount); action = "money_add"
-            elif mode == "finance_subtract":
-                user = await get_user(character[1])
-                if user[1] < amount:
-                    await message.answer(f"Недостаточно средств. Баланс: {user[1]} CR")
-                    return True
-                await subtract_balance(character[1], amount); action = "money_subtract"
-            else:
-                await set_balance(character[1], amount); action = "money_set"
-            await log_admin_action(message.from_id, action, character[1], cid, str(amount), int(time.time()))
+            ok, reason = await adjust_balance_by_admin(message.from_id, cid, mode, amount, int(time.time()))
+            if not ok:
+                await message.answer("Операция не выполнена: проверьте права, сумму и текущий баланс.")
+                return True
             await message.answer("✅ Финансы обновлены.")
             await show_player(message, cid)
             return True
@@ -1218,7 +1223,7 @@ def register_admin_handlers(bot, deps):
             await message.answer(
                 f"⚠️ УДАЛЕНИЕ КВЕНТЫ #{cid}\n{sci_line()}\n\n"
                 f"Персонаж: {character[2]}\nПричина: {reason}\n\n"
-                "Будут удалены квента, инвентарь, жильё, задания и местоположение. Баланс/XP аккаунта будут сброшены до стартовых значений.",
+                "Будут удалены квента, инвентарь, жильё, задания и местоположение. Баланс будет восстановлен до 1500 CR; XP и уровень будут сброшены.",
                 keyboard=kb.get_json(),
             )
             return True
@@ -1328,5 +1333,6 @@ def register_admin_handlers(bot, deps):
         "admin_role": admin_role,
         "has_role": has_role,
         "handle_admin_message": handle_admin_message,
+        "handle_legacy_finance": handle_legacy_finance,
         "show_player": show_player,
     }

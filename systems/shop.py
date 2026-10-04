@@ -1,4 +1,5 @@
 import json
+from database import purchase_item
 from pathlib import Path
 
 
@@ -71,8 +72,6 @@ def register_shop_handlers(bot, deps):
     get_character_by_user = deps["get_character_by_user"]
     create_user = deps["create_user"]
     get_user = deps["get_user"]
-    subtract_balance = deps["subtract_balance"]
-    add_inventory_item = deps["add_inventory_item"]
     stabilize_attachments = deps["stabilize_attachments"]
 
     # user_id -> {category: str, index: int}
@@ -202,8 +201,10 @@ def register_shop_handlers(bot, deps):
             )
             return True
 
-        await subtract_balance(message.from_id, total)
-        await add_inventory_item(character[0], item["category"], item["name"], quantity)
+        ok, reason = await purchase_item(message.from_id, character[0], item, quantity)
+        if not ok:
+            await message.answer("Покупка не выполнена: недостаточно средств или товар больше недоступен.")
+            return True
         item_emoji = {
             "Сухпаёк": "🍱",
             "Бутылка воды": "💧",

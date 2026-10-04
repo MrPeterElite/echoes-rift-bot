@@ -1,18 +1,25 @@
 import os
 import shutil
+import json
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
+from dotenv import load_dotenv
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 _SEED_DB_PATH = _PROJECT_ROOT / "database.db"
+load_dotenv(_PROJECT_ROOT / ".env")
 
 
 def _resolve_database_path():
     configured = os.getenv("DATABASE_PATH") or os.getenv("DB_PATH")
     if configured:
         path = Path(configured)
+    elif os.getenv("DATA_DIR"):
+        path = Path(os.environ["DATA_DIR"]) / "database.db"
     elif Path("/app/data").is_dir():
         # Bothost сохраняет /app/data между обновлениями контейнера.
         path = Path("/app/data/database.db")
@@ -39,7 +46,7 @@ DB_NAME = _resolve_database_path()
 
 
 async def connect():
-    return await aiosqlite.connect(DB_NAME)
+    return await aiosqlite.connect(DB_NAME, timeout=30)
 
 
 async def create_tables():
@@ -75,22 +82,9 @@ async def create_tables():
 
 
 async def create_user(user_id):
-    db = await connect()
+    async with _transaction() as db:
+        await db.execute("INSERT OR IGNORE INTO users (user_id, balance) VALUES (?, 1500)", (user_id,))
 
-    cursor = await db.execute(
-        "SELECT * FROM users WHERE user_id = ?",
-        (user_id,)
-    )
-    user = await cursor.fetchone()
-
-    if not user:
-        await db.execute(
-            "INSERT INTO users (user_id, balance) VALUES (?, ?)",
-            (user_id, 1500)
-        )
-
-    await db.commit()
-    await db.close()
 
 
 async def get_user(user_id):
@@ -106,66 +100,35 @@ async def get_user(user_id):
     return user
 
 
-async def reset_user(user_id):
-    db = await connect()
+async def reset_user(user_id, expected_character_id=None):
+    """Delete confirmed character state and restore the requested starting balance."""
+    async with _transaction() as db:
+        cursor = await db.execute("SELECT id FROM characters WHERE user_id = ? ORDER BY id DESC", (user_id,))
+        ids = [row[0] for row in await cursor.fetchall()]
+        if expected_character_id is not None and (not ids or ids[0] != expected_character_id):
+            return False
+        for cid in ids:
+            await _delete_character_state(db, cid)
+        await db.execute("DELETE FROM character_drafts WHERE user_id = ?", (user_id,))
+        await db.execute("UPDATE users SET balance = 1500, xp = 0, level = 1 WHERE user_id = ?", (user_id,))
+        return True
 
-    cursor = await db.execute(
-        "SELECT id FROM characters WHERE user_id = ?",
-        (user_id,)
-    )
-    character_ids = [row[0] for row in await cursor.fetchall()]
-
-    for character_id in character_ids:
-        # Удаляем состояние персонажа, чтобы новая квента не наследовала
-        # старое жильё, интерьер, инвентарь, задания или локацию.
-        for table in ("housing_interior_slots", "housing_interiors", "housing", "inventory", "weekly_quests", "character_locations"):
-            try:
-                await db.execute(
-                    f"DELETE FROM {table} WHERE character_id = ?",
-                    (character_id,)
-                )
-            except aiosqlite.OperationalError:
-                # Старые базы могут ещё не иметь одну из таблиц.
-                pass
-
-    await db.execute("DELETE FROM characters WHERE user_id = ?", (user_id,))
-    await db.execute(
-        "UPDATE users SET balance = 1500, xp = 0, level = 1 WHERE user_id = ?",
-        (user_id,)
-    )
-
-    await db.commit()
-    await db.close()
 
 
 async def create_character(data):
-    db = await connect()
+    async with _transaction() as db:
+        cursor = await db.execute("SELECT id FROM characters WHERE user_id = ? ORDER BY id DESC LIMIT 1", (data["user_id"],))
+        existing = await cursor.fetchone()
+        if existing:
+            return existing[0]
+        await db.execute("INSERT OR IGNORE INTO users (user_id, balance) VALUES (?, 1500)", (data["user_id"],))
+        cursor = await db.execute("""INSERT INTO characters
+            (user_id, name, age, gender, faction, biology, personality, history, arts, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+            tuple(data[k] for k in ('user_id','name','age','gender','faction','biology','personality','history')) + (','.join(data['arts']),))
+        await db.execute("DELETE FROM character_drafts WHERE user_id = ?", (data['user_id'],))
+        return cursor.lastrowid
 
-    cursor = await db.execute("""
-    INSERT INTO characters (
-        user_id, name, age, gender, faction,
-        biology, personality, history, arts, status
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        data["user_id"],
-        data["name"],
-        data["age"],
-        data["gender"],
-        data["faction"],
-        data["biology"],
-        data["personality"],
-        data["history"],
-        ",".join(data["arts"]),
-        "pending"
-    ))
-
-    character_id = cursor.lastrowid
-
-    await db.commit()
-    await db.close()
-
-    return character_id
 
 
 async def get_character_by_user(user_id):
@@ -226,14 +189,11 @@ async def ensure_career_columns():
         ("last_salary_time", "INTEGER DEFAULT 0")
     ]
 
+    cursor = await db.execute("PRAGMA table_info(characters)")
+    existing = {row[1] for row in await cursor.fetchall()}
     for column_name, column_type in columns:
-        try:
-            await db.execute(
-                f"ALTER TABLE characters ADD COLUMN {column_name} {column_type}"
-            )
-        except Exception:
-            pass
-
+        if column_name not in existing:
+            await db.execute(f"ALTER TABLE characters ADD COLUMN {column_name} {column_type}")
     await db.commit()
     await db.close()
 
@@ -280,13 +240,11 @@ async def ensure_faction_rank_columns():
         ("faction_rank", "TEXT"),
         ("faction_rank_level", "INTEGER DEFAULT 0")
     ]
+    cursor = await db.execute("PRAGMA table_info(characters)")
+    existing = {row[1] for row in await cursor.fetchall()}
     for column_name, column_type in columns:
-        try:
-            await db.execute(
-                f"ALTER TABLE characters ADD COLUMN {column_name} {column_type}"
-            )
-        except Exception:
-            pass
+        if column_name not in existing:
+            await db.execute(f"ALTER TABLE characters ADD COLUMN {column_name} {column_type}")
     await db.commit()
     await db.close()
 
@@ -664,15 +622,11 @@ async def update_housing_visibility(character_id, visibility):
 
 
 async def subtract_balance(user_id, amount):
-    db = await connect()
+    if not isinstance(amount, int) or amount <= 0:
+        return False
+    async with _transaction() as db:
+        return await _debit(db, user_id, amount)
 
-    await db.execute(
-        "UPDATE users SET balance = balance - ? WHERE user_id = ?",
-        (amount, user_id)
-    )
-
-    await db.commit()
-    await db.close()
 
 
 
@@ -738,35 +692,31 @@ async def create_weekly_quest(
     character_id, title, description, credits, xp, assigned_at,
     location="", difficulty="", report_requirements=""
 ):
-    await ensure_quest_tables()
-    db = await connect()
-    cursor = await db.execute("""
-        INSERT INTO weekly_quests (
-            character_id, title, description, credits, xp, status, assigned_at,
+    async with _transaction() as db:
+        cursor = await db.execute("SELECT id, status, assigned_at FROM weekly_quests WHERE character_id = ? ORDER BY id DESC LIMIT 1", (character_id,))
+        last = await cursor.fetchone()
+        if last and (last[1] in ('active', 'review', 'rejected') or assigned_at - (last[2] or 0) < 7 * 86400):
+            return last[0]
+        cursor = await db.execute("""
+            INSERT INTO weekly_quests (
+                character_id, title, description, credits, xp, status, assigned_at,
+                location, difficulty, report_requirements
+            )
+            VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+        """, (
+            character_id, title, description, credits, xp, assigned_at,
             location, difficulty, report_requirements
-        )
-        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
-    """, (
-        character_id, title, description, credits, xp, assigned_at,
-        location, difficulty, report_requirements
-    ))
-    quest_id = cursor.lastrowid
-    await db.commit()
-    await db.close()
-    return quest_id
+        ))
+        return cursor.lastrowid
+
 
 async def submit_quest_report(quest_id, report_text, report_attachment, report_time):
-    db = await connect()
-    await db.execute("""
-        UPDATE weekly_quests
-        SET status = 'review',
-            report_text = ?,
-            report_attachment = ?,
-            report_time = ?
-        WHERE id = ?
-    """, (report_text, report_attachment, report_time, quest_id))
-    await db.commit()
-    await db.close()
+    async with _transaction() as db:
+        cursor = await db.execute("""UPDATE weekly_quests SET status = 'review', report_text = ?,
+            report_attachment = ?, report_time = ? WHERE id = ? AND status IN ('active', 'rejected')""",
+            (report_text, report_attachment, report_time, quest_id))
+        return cursor.rowcount == 1
+
 
 async def get_quest_by_id(quest_id):
     db = await connect()
@@ -776,10 +726,13 @@ async def get_quest_by_id(quest_id):
     return row
 
 async def update_quest_status(quest_id, status):
-    db = await connect()
-    await db.execute("UPDATE weekly_quests SET status = ? WHERE id = ?", (status, quest_id))
-    await db.commit()
-    await db.close()
+    # Completion and rewards must only pass through complete_quest_with_rewards.
+    if status != 'rejected':
+        return False
+    async with _transaction() as db:
+        cursor = await db.execute("UPDATE weekly_quests SET status = 'rejected' WHERE id = ? AND status = 'review'", (quest_id,))
+        return cursor.rowcount == 1
+
 
 async def add_xp(user_id, amount):
     db = await connect()
@@ -821,7 +774,7 @@ async def ensure_location_tables():
     for code, data in LOCATIONS_SEED.items():
         name, peer_id, invite_link = data
         await db.execute("""
-            INSERT OR REPLACE INTO locations (code, name, peer_id, invite_link)
+            INSERT OR IGNORE INTO locations (code, name, peer_id, invite_link)
             VALUES (?, ?, ?, ?)
         """, (code, name, peer_id, invite_link))
     await db.commit()
@@ -1057,46 +1010,11 @@ async def add_inventory_item(character_id, category, item_name, quantity):
 
 
 async def remove_inventory_item(character_id, item_name, quantity):
-    if quantity <= 0:
-        return False, "invalid_quantity"
-    await ensure_inventory_tables()
-    db = await connect()
+    if not isinstance(quantity, int) or quantity <= 0:
+        return False, 'invalid_quantity'
+    async with _transaction() as db:
+        return await _take_item(db, character_id, item_name, quantity)
 
-    cursor = await db.execute("""
-        SELECT id, quantity
-        FROM inventory
-        WHERE character_id = ?
-        AND lower(item_name) = lower(?)
-        AND quantity > 0
-        ORDER BY id DESC
-        LIMIT 1
-    """, (character_id, item_name))
-
-    row = await cursor.fetchone()
-
-    if not row:
-        await db.close()
-        return False, "not_found"
-
-    item_id, current_quantity = row
-
-    if current_quantity < quantity:
-        await db.close()
-        return False, "not_enough"
-
-    new_quantity = current_quantity - quantity
-
-    if new_quantity <= 0:
-        await db.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
-    else:
-        await db.execute(
-            "UPDATE inventory SET quantity = ? WHERE id = ?",
-            (new_quantity, item_id)
-        )
-
-    await db.commit()
-    await db.close()
-    return True, "ok"
 
 
 async def find_inventory_item(character_id, item_name):
@@ -1119,25 +1037,24 @@ async def find_inventory_item(character_id, item_name):
 
 
 async def transfer_inventory_item(from_character_id, to_character_id, item_name, quantity):
-    if quantity <= 0:
-        return False, "invalid_quantity"
-    item = await find_inventory_item(from_character_id, item_name)
+    if not isinstance(quantity, int) or quantity <= 0:
+        return False, 'invalid_quantity'
+    if from_character_id == to_character_id:
+        return False, 'same_character'
+    async with _transaction() as db:
+        cursor = await db.execute("SELECT id FROM characters WHERE id IN (?, ?) AND status = 'approved'", (from_character_id, to_character_id))
+        if len(await cursor.fetchall()) != 2:
+            return False, 'character_invalid'
+        cursor = await db.execute("SELECT category, item_name FROM inventory WHERE character_id = ? AND lower(item_name) = lower(?) AND quantity > 0 ORDER BY id DESC LIMIT 1", (from_character_id, item_name))
+        item = await cursor.fetchone()
+        if not item:
+            return False, 'not_found'
+        ok, reason = await _take_item(db, from_character_id, item[1], quantity)
+        if not ok:
+            return False, reason
+        await _put_item(db, to_character_id, item[0], item[1], quantity)
+        return True, 'ok'
 
-    if not item:
-        return False, "not_found"
-
-    item_id, category, real_item_name, current_quantity = item
-
-    if current_quantity < quantity:
-        return False, "not_enough"
-
-    ok, reason = await remove_inventory_item(from_character_id, real_item_name, quantity)
-
-    if not ok:
-        return False, reason
-
-    await add_inventory_item(to_character_id, category, real_item_name, quantity)
-    return True, "ok"
 
 
 
@@ -1388,38 +1305,17 @@ async def revoke_mute(vk_user_id, revoked_by, revoked_at):
 
 
 async def delete_character_by_admin(character_id, reset_account=True):
-    """Удалить одну квенту и её игровое состояние. Возвращает (ok, user_id, name)."""
-    await ensure_core_update_tables()
-    db = await connect()
-    try:
-        await db.execute("BEGIN IMMEDIATE")
+    async with _transaction() as db:
         cursor = await db.execute("SELECT user_id, name FROM characters WHERE id = ?", (character_id,))
         row = await cursor.fetchone()
         if not row:
-            await db.rollback()
             return False, None, None
-        user_id, name = row
-        for table in (
-            'housing_interior_slots', 'housing_interiors', 'housing', 'inventory',
-            'weekly_quests', 'character_locations'
-        ):
-            try:
-                await db.execute(f"DELETE FROM {table} WHERE character_id = ?", (character_id,))
-            except aiosqlite.OperationalError:
-                pass
-        await db.execute("DELETE FROM characters WHERE id = ?", (character_id,))
+        await _delete_character_state(db, character_id)
+        await db.execute("DELETE FROM character_drafts WHERE user_id = ?", (row[0],))
         if reset_account:
-            await db.execute(
-                "UPDATE users SET balance = 1500, xp = 0, level = 1 WHERE user_id = ?",
-                (user_id,)
-            )
-        await db.commit()
-        return True, user_id, name
-    except Exception:
-        await db.rollback()
-        raise
-    finally:
-        await db.close()
+            await db.execute("UPDATE users SET balance = 1500, xp = 0, level = 1 WHERE user_id = ?", (row[0],))
+        return True, row[0], row[1]
+
 
 
 async def create_promo_code(code, max_uses, expires_at, created_by, created_at):
@@ -1708,3 +1604,162 @@ async def complete_quest_with_rewards(quest_id):
         raise
     finally:
         await db.close()
+
+# Shared transactional operations used by both buttons and text commands.
+@asynccontextmanager
+async def _transaction():
+    db = await connect()
+    try:
+        await db.execute('BEGIN IMMEDIATE')
+        yield db
+        await db.commit()
+    except BaseException:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+
+async def _debit(db, user_id, amount):
+    cursor = await db.execute('UPDATE users SET balance = balance - ? WHERE user_id = ? AND balance >= ?', (amount, user_id, amount))
+    return cursor.rowcount == 1
+
+
+async def _put_item(db, character_id, category, name, quantity):
+    await db.execute('''INSERT INTO inventory(character_id, category, item_name, quantity) VALUES (?, ?, ?, ?)
+        ON CONFLICT(character_id, category, item_name) DO UPDATE SET quantity = quantity + excluded.quantity''',
+        (character_id, category, name, quantity))
+
+
+async def _take_item(db, character_id, name, quantity):
+    cursor = await db.execute('SELECT id, quantity FROM inventory WHERE character_id = ? AND lower(item_name) = lower(?) AND quantity > 0 ORDER BY id DESC LIMIT 1', (character_id, name))
+    row = await cursor.fetchone()
+    if not row:
+        return False, 'not_found'
+    if row[1] < quantity:
+        return False, 'not_enough'
+    await db.execute('UPDATE inventory SET quantity = quantity - ? WHERE id = ?', (quantity, row[0]))
+    await db.execute('DELETE FROM inventory WHERE id = ? AND quantity = 0', (row[0],))
+    return True, 'ok'
+
+
+async def _delete_character_state(db, cid):
+    for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations'):
+        await db.execute(f'DELETE FROM {table} WHERE character_id = ?', (cid,))
+    await db.execute('DELETE FROM characters WHERE id = ?', (cid,))
+
+
+async def purchase_item(user_id, character_id, item, quantity):
+    if not isinstance(quantity, int) or quantity <= 0:
+        return False, 'invalid_quantity'
+    price = item.get('price')
+    if not isinstance(price, int) or price < 0 or price * quantity > 2**63 - 1:
+        return False, 'invalid_price'
+    if not item.get('purchasable', True):
+        return False, 'unavailable'
+    async with _transaction() as db:
+        cursor = await db.execute("SELECT faction FROM characters WHERE id = ? AND user_id = ? AND status = 'approved'", (character_id, user_id))
+        character = await cursor.fetchone()
+        if not character:
+            return False, 'character_invalid'
+        if item.get('required_faction') and character[0] != item['required_faction']:
+            return False, 'faction'
+        if not await _debit(db, user_id, price * quantity):
+            return False, 'not_enough_money'
+        await _put_item(db, character_id, item['category'], item['name'], quantity)
+        return True, 'ok'
+
+
+async def claim_salary(user_id, now, interval, salary_by_level):
+    async with _transaction() as db:
+        cursor = await db.execute('SELECT id, status, department, job_title, job_level, last_salary_time FROM characters WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+        c = await cursor.fetchone()
+        if not c or c[1] != 'approved' or not c[2] or not c[3] or not c[4]:
+            return False, 'career_invalid', 0
+        if now - (c[5] or 0) < interval:
+            return False, 'cooldown', interval - (now - (c[5] or 0))
+        amount = salary_by_level.get(c[4], 0)
+        if amount <= 0:
+            return False, 'career_invalid', 0
+        cursor = await db.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
+        if cursor.rowcount != 1:
+            return False, 'user_missing', 0
+        await db.execute('UPDATE characters SET last_salary_time = ? WHERE id = ?', (now, c[0]))
+        return True, 'ok', amount
+
+
+async def pay_rent(user_id, character_id, now, interval):
+    async with _transaction() as db:
+        cursor = await db.execute('SELECT h.weekly_rent, h.last_payment_time FROM housing h JOIN characters c ON c.id = h.character_id WHERE h.character_id = ? AND c.user_id = ?', (character_id, user_id))
+        row = await cursor.fetchone()
+        if not row:
+            return False, 'housing_missing', 0
+        rent, last = row[0], row[1] or 0
+        if rent <= 0:
+            return False, 'free', 0
+        if last and now - last < interval:
+            return False, 'cooldown', interval - (now - last)
+        if not await _debit(db, user_id, rent):
+            return False, 'not_enough_money', rent
+        await db.execute('UPDATE housing SET last_payment_time = ? WHERE character_id = ?', (now, character_id))
+        return True, 'ok', rent
+
+
+async def ensure_stability_tables():
+    async with _transaction() as db:
+        await db.execute('CREATE TABLE IF NOT EXISTS schema_migrations(version TEXT PRIMARY KEY)')
+        await db.execute('CREATE TABLE IF NOT EXISTS character_drafts(user_id INTEGER PRIMARY KEY, payload TEXT NOT NULL, updated_at INTEGER NOT NULL)')
+
+
+async def save_character_draft(user_id, draft):
+    async with _transaction() as db:
+        cursor = await db.execute('SELECT 1 FROM characters WHERE user_id = ?', (user_id,))
+        if await cursor.fetchone():
+            return False
+        await db.execute('INSERT INTO character_drafts(user_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at',
+                         (user_id, json.dumps(draft, ensure_ascii=False), int(time.time())))
+        return True
+
+
+async def load_character_draft(user_id):
+    db = await connect()
+    try:
+        cursor = await db.execute('SELECT payload FROM character_drafts WHERE user_id = ?', (user_id,))
+        row = await cursor.fetchone()
+        return json.loads(row[0]) if row else None
+    finally:
+        await db.close()
+
+
+async def delete_character_draft(user_id):
+    async with _transaction() as db:
+        await db.execute('DELETE FROM character_drafts WHERE user_id = ?', (user_id,))
+
+async def adjust_balance_by_admin(admin_id, character_id, mode, amount, now):
+    if not isinstance(amount, int) or amount < 0 or amount > 2**63 - 1:
+        return False, 'invalid_amount'
+    if mode not in ('finance_add', 'finance_subtract', 'finance_set') or (mode != 'finance_set' and amount == 0):
+        return False, 'invalid_amount'
+    async with _transaction() as db:
+        cursor = await db.execute("SELECT role FROM bot_admins WHERE vk_user_id = ? AND active = 1", (admin_id,))
+        role = await cursor.fetchone()
+        if not role or role[0] not in ('owner', 'senior', 'admin'):
+            return False, 'forbidden'
+        cursor = await db.execute('SELECT user_id FROM characters WHERE id = ?', (character_id,))
+        character = await cursor.fetchone()
+        if not character:
+            return False, 'not_found'
+        uid = character[0]
+        await db.execute('INSERT OR IGNORE INTO users(user_id, balance) VALUES (?, 1500)', (uid,))
+        if mode == 'finance_subtract':
+            if not await _debit(db, uid, amount):
+                return False, 'not_enough_money'
+        elif mode == 'finance_add':
+            cursor = await db.execute('UPDATE users SET balance = balance + ? WHERE user_id = ? AND balance <= ?', (amount, uid, 2**63 - 1 - amount))
+            if cursor.rowcount != 1:
+                return False, 'overflow'
+        else:
+            await db.execute('UPDATE users SET balance = ? WHERE user_id = ?', (amount, uid))
+        await db.execute('INSERT INTO admin_audit_log(admin_vk_id, action, target_vk_id, target_character_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                         (admin_id, mode, uid, character_id, str(amount), now))
+        return True, 'ok'

@@ -1,4 +1,5 @@
-from systems.utils import format_status
+import time
+from database import save_character_draft, load_character_draft, delete_character_draft
 def register_characters_handlers(bot, deps):
     format_status = deps["format_status"]
     main_menu = deps["main_menu"]
@@ -8,7 +9,6 @@ def register_characters_handlers(bot, deps):
     quenta_menu = deps["quenta_menu"]
     sci_line = deps["sci_line"]
     get_character_by_user = deps["get_character_by_user"]
-    drafts = deps["drafts"]
     faction_keyboard = deps["faction_keyboard"]
     FACTION_ARTS = deps["FACTION_ARTS"]
     FACTION_DESCRIPTIONS = deps["FACTION_DESCRIPTIONS"]
@@ -26,6 +26,37 @@ def register_characters_handlers(bot, deps):
     ADMIN_CHAT_ID = deps["ADMIN_CHAT_ID"]
     format_character = deps["format_character"]
     stabilize_attachments = deps["stabilize_attachments"]
+
+    deletion_requests = {}
+
+    async def require_private(message):
+        if message.peer_id != message.from_id:
+            await message.answer("Создание и удаление персонажа доступны в личных сообщениях бота.")
+            return False
+        return True
+
+    async def prompt_draft(message, draft):
+        prompts = {
+            "name": "Шаг 1/8: введите имя персонажа.",
+            "age": "Шаг 2/8: введите возраст персонажа.",
+            "gender": "Шаг 3/8: введите пол персонажа.",
+            "faction": "Шаг 4/8: выберите фракцию.",
+            "biology": "Шаг 5/8: опишите биологию персонажа.",
+            "personality": "Шаг 6/8: опишите характер персонажа.",
+            "history": "Шаг 7/8: напишите историю персонажа.",
+            "arts": f"Шаг 8/8: прикрепите арты. Сохранено: {len(draft.get('arts', []))}/3. Затем нажмите «✅ Готово».",
+        }
+        keyboard = faction_keyboard if draft['step'] == 'faction' else done_arts_keyboard
+        await message.answer(prompts[draft['step']], keyboard=keyboard.get_json())
+
+    async def pause_draft(message):
+        deletion_requests.pop(message.from_id, None)
+        if message.peer_id != message.from_id:
+            return
+        draft = await load_character_draft(message.from_id)
+        if draft:
+            draft['active'] = False
+            await save_character_draft(message.from_id, draft)
 
     @bot.on.message(text="📜 Квенты")
     async def quenta_menu_handler(message):
@@ -81,9 +112,11 @@ def register_characters_handlers(bot, deps):
 
     @bot.on.message(text="📜 Создать квенту")
     async def create_form_handler(message):
+        if not await require_private(message):
+            return
         old_character = await get_character_by_user(message.from_id)
 
-        if old_character and old_character[10] in ["pending", "approved"]:
+        if old_character:
             await message.answer(
                 "⚠️ ДОСЬЕ УЖЕ СУЩЕСТВУЕТ\n\n"
                 "Чтобы создать новую квенту, сначала удалите текущего персонажа.",
@@ -91,35 +124,50 @@ def register_characters_handlers(bot, deps):
             )
             return
 
-        drafts[message.from_id] = {
-            "step": "name",
-            "user_id": message.from_id,
-            "arts": []
-        }
-
-        await message.answer(
-            "◢ СОЗДАНИЕ КВЕНТЫ ◣\n"
-            f"{sci_line()}\n\n"
-            "Шаг 1/8\n"
-            "Введите имя персонажа."
-        )
+        draft = await load_character_draft(message.from_id)
+        if not draft:
+            draft = {"step": "name", "user_id": message.from_id, "arts": []}
+        draft['active'] = True
+        await save_character_draft(message.from_id, draft)
+        await prompt_draft(message, draft)
 
 
     @bot.on.message(text="🗑 Удалить персонажа")
     async def delete_character_handler(message):
-        await reset_user(message.from_id)
-        drafts.pop(message.from_id, None)
-        archive_users.discard(message.from_id)
-
+        if not await require_private(message):
+            return
+        character = await get_character_by_user(message.from_id)
+        if not character:
+            await message.answer("Персонажа нет. Черновик можно очистить кнопкой «🔄 Начать заново».")
+            return
+        deletion_requests[message.from_id] = (character[0], time.monotonic() + 300)
+        keyboard = (Keyboard(one_time=True)
+                    .add(Text("🗑 Подтвердить удаление персонажа"), color=KeyboardButtonColor.NEGATIVE)
+                    .row().add(Text("↩ Отменить удаление персонажа"), color=KeyboardButtonColor.SECONDARY))
         await message.answer(
-            "🔴 ПЕРСОНАЖ УДАЛЁН\n"
-            f"{sci_line()}\n\n"
-            "Досье очищено.\n"
-            "Экономика сброшена.\n"
-            "Баланс восстановлен до 1500 CR.\n\n"
-            "Вы можете создать новую квенту.",
-            keyboard=quenta_menu.get_json()
-        )
+            f"Удалить персонажа #{character[0]} — {character[2]}?\n"
+            "Квента, вещи, жильё, задания и опыт будут удалены. Баланс вернётся к 1500 CR. "
+            "Подтверждение действует 5 минут.",
+            keyboard=keyboard.get_json())
+
+    @bot.on.message(text="🗑 Подтвердить удаление персонажа")
+    async def confirm_delete_character(message):
+        if not await require_private(message):
+            return
+        request = deletion_requests.pop(message.from_id, None)
+        if not request or time.monotonic() > request[1]:
+            await message.answer("Подтверждение устарело. Откройте удаление персонажа заново.", keyboard=quenta_menu.get_json())
+            return
+        if not await reset_user(message.from_id, expected_character_id=request[0]):
+            await message.answer("Персонаж уже изменился. Удаление отменено.", keyboard=quenta_menu.get_json())
+            return
+        archive_users.discard(message.from_id)
+        await message.answer("Персонаж удалён. Баланс восстановлен до 1500 CR, опыт сброшен. Можно создать новую квенту.", keyboard=quenta_menu.get_json())
+
+    @bot.on.message(text="↩ Отменить удаление персонажа")
+    async def cancel_delete_character(message):
+        deletion_requests.pop(message.from_id, None)
+        await message.answer("Удаление отменено.", keyboard=quenta_menu.get_json())
 
 
     @bot.on.message(text="📚 Архив квент")
@@ -163,13 +211,16 @@ def register_characters_handlers(bot, deps):
         "🚫 Без фракции"
     ])
     async def faction_selected_handler(message):
-        draft = drafts.get(message.from_id)
+        if not await require_private(message):
+            return
+        draft = await load_character_draft(message.from_id)
 
-        if not draft or draft["step"] != "faction":
+        if not draft or not draft.get("active", True) or draft["step"] != "faction":
             return
 
         draft["faction"] = message.text
         draft["step"] = "biology"
+        await save_character_draft(message.from_id, draft)
 
         art = FACTION_ARTS.get(message.text)
         desc = FACTION_DESCRIPTIONS.get(message.text, "")
@@ -194,7 +245,9 @@ def register_characters_handlers(bot, deps):
 
     @bot.on.message(text="🔄 Начать заново")
     async def restart_form_handler(message):
-        drafts.pop(message.from_id, None)
+        if not await require_private(message):
+            return
+        await delete_character_draft(message.from_id)
 
         await message.answer(
             "🔄 СОЗДАНИЕ КВЕНТЫ СБРОШЕНО\n\n"
@@ -205,9 +258,11 @@ def register_characters_handlers(bot, deps):
 
     @bot.on.message(text="✅ Готово")
     async def finish_arts_handler(message):
-        draft = drafts.get(message.from_id)
+        if not await require_private(message):
+            return
+        draft = await load_character_draft(message.from_id)
 
-        if not draft or draft["step"] != "arts":
+        if not draft or not draft.get("active", True) or draft["step"] != "arts":
             return
 
         if len(draft["arts"]) == 0:
@@ -232,21 +287,26 @@ def register_characters_handlers(bot, deps):
         player_name = await get_vk_name(message.from_id)
         vk_link = f"https://vk.com/id{message.from_id}"
 
-        await bot.api.messages.send(
-            peer_id=ADMIN_CHAT_ID,
-            random_id=0,
-            message=(
-                "📡 НОВАЯ КВЕНТА ОБНАРУЖЕНА\n"
-                f"{sci_line()}\n\n"
-                f"{format_character(character)}\n\n"
-                f"👤 Игрок: {player_name}\n"
-                f"🔗 Профиль игрока:\n{vk_link}"
-            ),
-            attachment=",".join(draft["arts"]),
-            keyboard=admin_keyboard.get_json()
-        )
+        try:
+            await bot.api.messages.send(
+                peer_id=ADMIN_CHAT_ID,
+                random_id=0,
+                message=(
+                    "📡 НОВАЯ КВЕНТА ОБНАРУЖЕНА\n"
+                    f"{sci_line()}\n\n"
+                    f"{format_character(character)}\n\n"
+                    f"👤 Игрок: {player_name}\n"
+                    f"🔗 Профиль игрока:\n{vk_link}"
+                ),
+                attachment=",".join(draft["arts"]),
+                keyboard=admin_keyboard.get_json()
+            )
+        except Exception:
+            # The saved quenta is still visible in /админ -> pending characters.
+            await message.answer("Квента сохранена. Уведомление администрации не доставлено; она доступна в очереди проверки.")
 
-        drafts.pop(message.from_id, None)
+
+        await delete_character_draft(message.from_id)
 
         await message.answer(
             "⏳ КВЕНТА ОТПРАВЛЕНА НА ВЕРИФИКАЦИЮ\n"
@@ -256,3 +316,91 @@ def register_characters_handlers(bot, deps):
             keyboard=quenta_menu.get_json()
         )
 
+
+    async def handle_character_message(message):
+        text = message.text or ""
+        user_id = message.from_id
+        if message.peer_id != message.from_id or text.startswith('/'):
+            return
+        draft = await load_character_draft(user_id)
+    
+        if not draft or not draft.get("active", True):
+            return
+    
+        step = draft["step"]
+    
+        if step == "name":
+            draft["name"] = text
+            draft["step"] = "age"
+            await save_character_draft(user_id, draft)
+            await message.answer("Шаг 2/8\nВведите возраст персонажа.")
+            return
+    
+        if step == "age":
+            draft["age"] = text
+            draft["step"] = "gender"
+            await save_character_draft(user_id, draft)
+            await message.answer("Шаг 3/8\nВведите пол персонажа.")
+            return
+    
+        if step == "gender":
+            draft["gender"] = text
+            draft["step"] = "faction"
+            await save_character_draft(user_id, draft)
+            await message.answer(
+                "Шаг 4/8\nВыберите фракцию персонажа.",
+                keyboard=faction_keyboard.get_json()
+            )
+            return
+    
+        if step == "biology":
+            draft["biology"] = text
+            draft["step"] = "personality"
+            await save_character_draft(user_id, draft)
+            await message.answer("Шаг 6/8\nОпишите характер персонажа.")
+            return
+    
+        if step == "personality":
+            draft["personality"] = text
+            draft["step"] = "history"
+            await save_character_draft(user_id, draft)
+            await message.answer("Шаг 7/8\nНапишите историю персонажа.")
+            return
+    
+        if step == "history":
+            draft["history"] = text
+            draft["step"] = "arts"
+            await save_character_draft(user_id, draft)
+            await message.answer(
+                "Шаг 8/8\n"
+                "Прикрепите от 1 до 3 артов персонажа.\n\n"
+                "Когда закончите — нажмите «✅ Готово».",
+                keyboard=done_arts_keyboard.get_json()
+            )
+            return
+    
+        if step == "arts":
+            attachment = get_photo_attachment(message)
+    
+            if not attachment:
+                await message.answer("Отправьте именно фото/арт.")
+                return
+    
+            if len(draft["arts"]) >= 3:
+                await message.answer(
+                    "Лимит — 3 арта.\n"
+                    "Нажмите «✅ Готово», чтобы отправить квенту."
+                )
+                return
+    
+            draft["arts"].append(attachment)
+            await save_character_draft(user_id, draft)
+    
+            await message.answer(
+                f"🖼 Арт принят: {len(draft['arts'])}/3\n\n"
+                "Можете отправить ещё или нажать «✅ Готово».",
+                keyboard=done_arts_keyboard.get_json()
+            )
+            return
+
+    return {"handle_message": handle_character_message, "pause_draft": pause_draft}

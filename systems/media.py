@@ -1,5 +1,8 @@
 import asyncio
 import json
+import os
+import shutil
+from database import DB_NAME
 import urllib.request
 from pathlib import Path
 
@@ -7,7 +10,14 @@ from vkbottle import PhotoMessageUploader
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_CACHE_PATH = _PROJECT_ROOT / "data" / "attachment_cache.json"
+_LEGACY_CACHE_PATH = _PROJECT_ROOT / "data" / "attachment_cache.json"
+_RUNTIME_DIR = Path(os.environ["DATA_DIR"]) if os.getenv("DATA_DIR") else (
+    Path(DB_NAME).parent if Path(DB_NAME).resolve().parent != _PROJECT_ROOT else _PROJECT_ROOT / "data"
+)
+_CACHE_PATH = _RUNTIME_DIR / "attachment_cache.json"
+if not _CACHE_PATH.exists() and _LEGACY_CACHE_PATH.exists() and _CACHE_PATH.resolve() != _LEGACY_CACHE_PATH.resolve():
+    _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(_LEGACY_CACHE_PATH, _CACHE_PATH)
 _CACHE_LOCK = asyncio.Lock()
 _HISTORY_PAGE_SIZE = 200
 _HISTORY_MAX_PAGES = 25

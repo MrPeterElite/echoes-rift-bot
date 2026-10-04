@@ -10,3 +10,9 @@ venv/
 
 # Runtime cache
 data/attachment_cache.json
+
+# Persistent game data and migration backups
+*.db
+*.db-wal
+*.db-shm
+backups/

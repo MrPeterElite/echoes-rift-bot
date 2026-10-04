@@ -1,5 +1,5 @@
 import time
-from systems.utils import format_salary_cooldown
+from database import claim_salary
 
 def register_careers_handlers(bot, deps):
     sci_line = deps["sci_line"]
@@ -11,8 +11,6 @@ def register_careers_handlers(bot, deps):
     WEEK_SECONDS = deps["WEEK_SECONDS"]
     format_salary_cooldown = deps["format_salary_cooldown"]
     SALARY_BY_LEVEL = deps["SALARY_BY_LEVEL"]
-    add_balance = deps["add_balance"]
-    update_last_salary = deps["update_last_salary"]
 
     @bot.on.message(text="💼 Карьера")
     async def career_menu_handler(message):
@@ -60,7 +58,6 @@ def register_careers_handlers(bot, deps):
     async def salary_handler(message):
         await create_user(message.from_id)
 
-        user = await get_user(message.from_id)
         character = await get_character_by_user(message.from_id)
 
         if not character:
@@ -105,8 +102,13 @@ def register_careers_handlers(bot, deps):
 
         salary = SALARY_BY_LEVEL.get(job_level, 0)
 
-        await add_balance(message.from_id, salary)
-        await update_last_salary(character[0], now)
+        ok, reason, value = await claim_salary(message.from_id, now, WEEK_SECONDS, SALARY_BY_LEVEL)
+        if not ok:
+            text = (f"Зарплата уже получена. До следующей выплаты: {format_salary_cooldown(value)}"
+                    if reason == "cooldown" else "Выплата недоступна: проверьте должность и статус персонажа.")
+            await message.answer(text, keyboard=career_menu.get_json())
+            return
+        salary = value
 
         updated_user = await get_user(message.from_id)
 

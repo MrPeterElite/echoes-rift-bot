@@ -1,8 +1,8 @@
 import json
+from database import pay_rent
 import time
 from pathlib import Path
 
-from systems.utils import format_salary_cooldown
 
 
 HOUSING_SLOT_LABELS = {
@@ -159,8 +159,6 @@ def register_housing_handlers(bot, deps):
     format_salary_cooldown = deps["format_salary_cooldown"]
     create_user = deps["create_user"]
     get_user = deps["get_user"]
-    subtract_balance = deps["subtract_balance"]
-    update_housing_payment = deps["update_housing_payment"]
     stabilize_attachments = deps.get("stabilize_attachments")
 
     interior_menu = (
@@ -636,8 +634,13 @@ def register_housing_handlers(bot, deps):
             )
             return
 
-        await subtract_balance(message.from_id, rent)
-        await update_housing_payment(character[0], now)
+        ok, reason, value = await pay_rent(message.from_id, character[0], now, WEEK_SECONDS)
+        if not ok:
+            text = ("Аренда уже оплачена." if reason == "cooldown"
+                    else "Оплата не выполнена: проверьте баланс и назначенную каюту.")
+            await message.answer(text, keyboard=housing_menu.get_json())
+            return
+        rent = value
 
         updated_user = await get_user(message.from_id)
 

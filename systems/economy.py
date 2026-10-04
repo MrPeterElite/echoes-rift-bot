@@ -188,7 +188,7 @@ def register_economy_handlers(bot, deps):
 
     @bot.on.message(text="✅ Подтвердить перевод")
     async def transfer_confirm_button(message):
-        session = sessions.get(message.from_id, {})
+        session = sessions.pop(message.from_id, {})
         if session.get("mode") != "transfer_confirm":
             await message.answer("Нет перевода, ожидающего подтверждения.", keyboard=finance_menu.get_json())
             return

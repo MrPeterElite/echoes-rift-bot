@@ -180,7 +180,9 @@ def register_quest_handlers(bot, deps):
             await message.answer("Отчёт слишком короткий. Опишите выполненную RP-сцену подробнее (минимум 30 символов).")
             return
         attachment = get_photo_attachment(message)
-        await submit_quest_report(quest[0], report, attachment, int(time.time()))
+        if not await submit_quest_report(quest[0], report, attachment, int(time.time())):
+            await message.answer("Статус задания уже изменился. Откройте задание заново.")
+            return
 
         admin_keyboard = (
             Keyboard(one_time=False)
@@ -228,7 +230,6 @@ def register_quest_handlers(bot, deps):
             await message.answer(errors.get(reason, "Задание не удалось принять."))
             return
         character_id, user_id, credits, xp = reward
-        character = await get_character_by_id(character_id)
         try:
             await bot.api.messages.send(
                 peer_id=user_id, random_id=0,
@@ -256,7 +257,9 @@ def register_quest_handlers(bot, deps):
             await message.answer("Это задание сейчас не ожидает проверки.")
             return
         character = await get_character_by_id(quest[1])
-        await update_quest_status(quest_id, "rejected")
+        if not await update_quest_status(quest_id, "rejected"):
+            await message.answer("Отчёт уже обработан другим администратором.")
+            return
         if character:
             try:
                 await bot.api.messages.send(
