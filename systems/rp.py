@@ -1,4 +1,7 @@
 import random
+import time
+
+from systems import duels
 
 
 async def handle_rp_command(message, bot, deps):
@@ -32,6 +35,7 @@ async def handle_rp_command(message, bot, deps):
     get_character_location = deps["get_character_location"]
     delete_message_from_chat = deps["delete_message_from_chat"]
     sci_line = deps["sci_line"]
+    battle_chat_id = int(deps.get("BATTLE_CHAT_ID") or 0)
 
     character = await get_character_by_user(message.from_id)
 
@@ -43,10 +47,49 @@ async def handle_rp_command(message, bot, deps):
         await message.answer("RP-команды доступны только после одобрения квенты.")
         return True
 
+    scene = await duels.refresh_character_scene(character[0], int(time.time()))
+
+    # /try is deliberately not a second combat resolver. During an automatic
+    # duel all disputed outcomes must go through the duel buttons.
+    if command == "/try" and scene["in_duel"]:
+        await message.answer(
+            "⛔ /try недоступен во время автоматической дуэли.\n"
+            "Атака, защита и лечение разрешаются системой /дуель. "
+            "/me, /do и /say остаются доступны для отыгрыша."
+        )
+        return True
+
+    # The dedicated battle chat is a technical/RP combat space, not a physical
+    # location. Only active duel participants may use RP commands there.
+    if battle_chat_id and message.peer_id == battle_chat_id:
+        active = await duels.active_duel_for_character(character[0], int(time.time()))
+        if not active:
+            await message.answer(
+                "⚔️ В боевом чате RP-команды доступны участникам активной дуэли.\n"
+                "Создайте вызов командой /дуель в своей реальной RP-локации."
+            )
+            return True
+        if command == "/try":
+            await message.answer("⛔ /try не используется для разрешения действий в автоматической дуэли.")
+            return True
+
+        await delete_message_from_chat(message)
+        prefix = (
+            f"⚔️ Дуэль #{active['id']} · 📍 {active.get('origin_name','исходная локация')}\n"
+            f"{sci_line()}\n\n"
+        )
+        if command == "/me":
+            await message.answer(prefix + f"✦ {character[2]} {content}")
+        elif command == "/do":
+            await message.answer(prefix + f"◇ {content}")
+        elif command == "/say":
+            await message.answer(prefix + f"{character[2]}: «{content}»")
+        return True
+
     chat_location = await get_location_by_peer(message.peer_id)
 
     if not chat_location:
-        await message.answer("RP-команды работают только в локационных чатах.")
+        await message.answer("RP-команды работают только в локационных чатах и в боевой беседе во время дуэли.")
         return True
 
     current_location = await get_character_location(character[0])

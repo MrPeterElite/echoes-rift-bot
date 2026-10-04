@@ -147,6 +147,7 @@ def register_economy_handlers(bot, deps):
                 "already_used": "Вы уже активировали этот промокод.",
                 "no_rewards": "Промокод настроен некорректно: награды отсутствуют.",
                 "character_invalid": "Для активации нужна ваша действующая одобренная квента.",
+                "in_combat": "Промокод содержит боевые предметы. Активируйте его после завершения боевой сцены.",
             }
             await message.answer("❌ " + errors.get(result, "Промокод не активирован."), keyboard=finance_menu.get_json())
             return

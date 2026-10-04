@@ -15,6 +15,7 @@ os.environ['DATABASE_PATH'] = str(Path(_BOOT.name) / 'bootstrap.db')
 Path(os.environ['DATABASE_PATH']).touch()
 os.environ['VK_TOKEN'] = 'test-offline-token'
 os.environ['BOT_OWNER_ID'] = '999'
+os.environ['BATTLE_CHAT_ID'] = '2000000888'
 import database as db
 from stability import initialize_database
 
@@ -157,6 +158,19 @@ class StabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(r[0] for r in results),1)
         self.assertEqual((await db.get_user(1))[1],20)
         self.assertEqual((await db.get_user(2))[1],1580)
+
+    async def test_combat_supply_purchase_and_transfer_blocked_in_scene(self):
+        self.sql("INSERT OR IGNORE INTO character_health(character_id) VALUES (?)",(self.cid,))
+        self.sql("UPDATE character_health SET scene_key='manual-scene' WHERE character_id=?",(self.cid,))
+        item=dict(name='Combat ration',category='food',price=80,purchasable=True)
+        self.assertEqual((await db.purchase_item(1,self.cid,item,1))[1],'in_combat')
+        self.sql("UPDATE character_health SET scene_key='' WHERE character_id=?",(self.cid,))
+        await db.add_inventory_item(self.cid,'food','Combat ration',1)
+        self.sql("INSERT OR IGNORE INTO character_health(character_id) VALUES (?)",(self.cids[1],))
+        self.sql("UPDATE character_health SET scene_key='manual-scene' WHERE character_id=?",(self.cids[1],))
+        self.assertEqual((await db.transfer_inventory_item(self.cid,self.cids[1],'Combat ration',1))[1],'in_combat')
+        self.assertEqual((await db.get_inventory(self.cid))[0][2],1)
+
     async def test_migration_repeat_preserves_custom_location(self):
         self.sql("UPDATE locations SET name='Custom' WHERE code='холл'")
         await initialize_database();await initialize_database()

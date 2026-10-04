@@ -1,5 +1,7 @@
 """Individual armor instances; atomic equipment, repairs and transfers."""
+import time
 import database as db
+from systems import duels
 
 
 async def ensure_armor_tables():
@@ -31,6 +33,9 @@ async def list_armor(cid):
 
 
 async def armor_action(uid, cid, action, armor_id=None, target_id=None, expected=None):
+    await duels.refresh_character_scene(cid, int(time.time()))
+    if action == 'transfer' and target_id:
+        await duels.refresh_character_scene(target_id, int(time.time()))
     async with db._transaction() as conn:
         cursor = await conn.execute("SELECT 1 FROM characters WHERE id=? AND user_id=? AND status='approved'",(cid,uid))
         if not await cursor.fetchone():

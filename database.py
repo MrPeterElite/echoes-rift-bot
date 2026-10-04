@@ -44,6 +44,10 @@ def _resolve_database_path():
 
 DB_NAME = _resolve_database_path()
 
+# Categories that can change a character's combat resources. They cannot be
+# purchased or transferred into/out of an active combat scene.
+COMBAT_SUPPLY_CATEGORIES = {"food", "medicine", "armor", "weapons"}
+
 
 async def connect():
     return await aiosqlite.connect(DB_NAME, timeout=30)
@@ -1042,6 +1046,13 @@ async def transfer_inventory_item(from_character_id, to_character_id, item_name,
         item = await cursor.fetchone()
         if not item:
             return False, 'not_found'
+        if item[0] in COMBAT_SUPPLY_CATEGORIES:
+            cursor = await db.execute(
+                "SELECT character_id, scene_key FROM character_health WHERE character_id IN (?, ?)",
+                (from_character_id, to_character_id),
+            )
+            if any(row[1] for row in await cursor.fetchall()):
+                return False, 'in_combat'
         ok, reason = await _take_item(db, from_character_id, item[1], quantity)
         if not ok:
             return False, reason
@@ -1435,6 +1446,12 @@ async def redeem_promo_code(code, vk_user_id, character_id, now):
         if not rewards:
             await db.rollback(); return False, 'no_rewards', []
 
+        if any(r[0] == 'item' and r[3] in COMBAT_SUPPLY_CATEGORIES for r in rewards):
+            cursor = await db.execute('SELECT scene_key FROM character_health WHERE character_id=?', (character_id,))
+            scene = await cursor.fetchone()
+            if scene and scene[0]:
+                await db.rollback(); return False, 'in_combat', []
+
         cursor = await db.execute("SELECT 1 FROM users WHERE user_id = ?", (vk_user_id,))
         if not await cursor.fetchone():
             await db.execute(
@@ -1671,6 +1688,11 @@ async def purchase_item(user_id, character_id, item, quantity):
             return False, 'character_invalid'
         if item.get('required_faction') and character[0] != item['required_faction']:
             return False, 'faction'
+        if item.get('category') in COMBAT_SUPPLY_CATEGORIES:
+            cursor = await db.execute('SELECT scene_key FROM character_health WHERE character_id=?', (character_id,))
+            scene = await cursor.fetchone()
+            if scene and scene[0]:
+                return False, 'in_combat'
         if item.get('category') == 'armor' and (quantity > 100 or not isinstance(item.get('max_durability'),int) or not 0 < item['max_durability'] <= 10000 or price <= 0):
             return False, 'invalid_quantity'
         if item.get('category') == 'weapons' and quantity > 100:

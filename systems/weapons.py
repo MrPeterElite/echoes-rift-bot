@@ -1,5 +1,7 @@
 """Persistent owned weapons and one active weapon per character."""
+import time
 import database as db
+from systems import duels
 from systems.weapon_stats import weapon_stats
 
 
@@ -27,6 +29,9 @@ async def list_weapons(cid):
 
 
 async def weapon_action(uid,cid,action,weapon_id=None,target_id=None):
+    await duels.refresh_character_scene(cid, int(time.time()))
+    if action == 'transfer' and target_id:
+        await duels.refresh_character_scene(target_id, int(time.time()))
     async with db._transaction() as conn:
         cursor=await conn.execute("SELECT 1 FROM characters WHERE id=? AND user_id=? AND status='approved'",(cid,uid))
         if not await cursor.fetchone():return {'status':'error','text':'Нужна ваша одобренная квента.'}

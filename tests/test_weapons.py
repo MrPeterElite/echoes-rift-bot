@@ -26,7 +26,7 @@ class WeaponTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(await list_weapons(self.cid)),2)
         self.assertEqual(await db.get_inventory(self.cid),[])
         self.assertEqual((await get_health(self.cid,NOW))['weapon_name'],self.item['name'])
-        self.assertEqual((await db.get_user(1))[1],1000)
+        self.assertEqual((await db.get_user(1))[1],900)
     async def test_ownership_transfer_and_one_equipped(self):
         wid=await self.buy(2)
         self.assertEqual((await weapon_action(2,self.cid,'equip',wid))['status'],'error')

@@ -17,7 +17,7 @@ async def ensure_panel_tables():
 async def participant_key(message):
     conn=await db.connect()
     try:
-        cur=await conn.execute("SELECT d.id FROM duels d JOIN characters c ON c.id IN (d.a,d.b) WHERE c.user_id=? AND d.peer=? AND d.status!='done' ORDER BY d.id DESC LIMIT 1",(message.from_id,message.peer_id))
+        cur=await conn.execute("SELECT d.id FROM duels d JOIN characters c ON c.id IN (d.a,d.b) WHERE c.user_id=? AND d.status!='done' AND ((d.status='invite' AND COALESCE(d.origin_peer,d.peer)=?) OR (d.status='active' AND COALESCE(d.battle_peer,d.peer)=?)) ORDER BY d.id DESC LIMIT 1",(message.from_id,message.peer_id,message.peer_id))
         row=await cur.fetchone()
         return f'duel:{row[0]}' if row else None
     finally:await conn.close()
@@ -68,10 +68,12 @@ def quiet_handlers(bot):
     def decorate(handler):
         @wraps(handler)
         async def wrapped(message,*args,**kwargs):
-            # Serialize state transitions and panel updates from both players together.
-            lock=locks.setdefault(message.peer_id,asyncio.Lock())
+            # Serialize only one duel (not the whole battle chat), so several
+            # independent fights can run in the same technical conversation.
+            key=await participant_key(message)
+            lock_key=key or f'peer:{message.peer_id}:user:{message.from_id}'
+            lock=locks.setdefault(lock_key,asyncio.Lock())
             async with lock:
-                key=await participant_key(message)
                 return await handler(PanelMessage(message,bot,key),*args,**kwargs)
         return wrapped
     return decorate

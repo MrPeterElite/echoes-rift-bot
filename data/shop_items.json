@@ -974,7 +974,7 @@
         "name": "Вибронож «Искра»",
         "category": "weapons",
         "weapon_type": "Ближний бой",
-        "price": 250,
+        "price": 300,
         "description": "Компактный клинок с вибрирующей кромкой.",
         "purchasable": true,
         "usable": false,
@@ -983,7 +983,6 @@
         "photo": "",
         "damage": 12,
         "damage_type": "режущий",
-        "range_label": "вплотную",
         "local_image": "weapons/weapon_01_vibroknife.png"
       },
       {
@@ -991,7 +990,7 @@
         "name": "Электродубинка «Контур»",
         "category": "weapons",
         "weapon_type": "Ближний бой",
-        "price": 400,
+        "price": 450,
         "description": "Служебная дубинка с разрядным модулем.",
         "purchasable": true,
         "usable": false,
@@ -1000,7 +999,6 @@
         "photo": "",
         "damage": 14,
         "damage_type": "электрический",
-        "range_label": "вплотную",
         "local_image": "weapons/weapon_02_shock_baton.png"
       },
       {
@@ -1008,16 +1006,15 @@
         "name": "Вибромеч «Грань»",
         "category": "weapons",
         "weapon_type": "Ближний бой",
-        "price": 900,
+        "price": 1400,
         "description": "Удлинённый виброклинок в усиленных ножнах.",
         "purchasable": true,
         "usable": false,
         "transferable": true,
         "consumable": false,
         "photo": "",
-        "damage": 22,
+        "damage": 20,
         "damage_type": "режущий",
-        "range_label": "вплотную",
         "local_image": "weapons/weapon_03_vibrosword.png"
       },
       {
@@ -1025,7 +1022,7 @@
         "name": "Карманный бластер «Шёпот»",
         "category": "weapons",
         "weapon_type": "Компактный бластер",
-        "price": 500,
+        "price": 650,
         "description": "Небольшой бластер для скрытого ношения в RP.",
         "purchasable": true,
         "usable": false,
@@ -1034,7 +1031,6 @@
         "photo": "",
         "damage": 16,
         "damage_type": "энергетический",
-        "range_label": "ближняя",
         "local_image": "weapons/weapon_04_holdout.png"
       },
       {
@@ -1042,16 +1038,15 @@
         "name": "Бластерный пистолет «Вектор»",
         "category": "weapons",
         "weapon_type": "Бластерный пистолет",
-        "price": 750,
+        "price": 1000,
         "description": "Стандартный личный бластер колонистов и охраны.",
         "purchasable": true,
         "usable": false,
         "transferable": true,
         "consumable": false,
         "photo": "",
-        "damage": 20,
+        "damage": 18,
         "damage_type": "энергетический",
-        "range_label": "ближняя / средняя",
         "local_image": "weapons/weapon_05_pistol.png"
       },
       {
@@ -1059,16 +1054,15 @@
         "name": "Тяжёлый бластер «Гром»",
         "category": "weapons",
         "weapon_type": "Тяжёлый бластерный пистолет",
-        "price": 1200,
+        "price": 1900,
         "description": "Массивный пистолет с усиленным энергоблоком.",
         "purchasable": true,
         "usable": false,
         "transferable": true,
         "consumable": false,
         "photo": "",
-        "damage": 26,
+        "damage": 22,
         "damage_type": "энергетический",
-        "range_label": "ближняя / средняя",
         "local_image": "weapons/weapon_06_heavy_pistol.png"
       },
       {
@@ -1076,7 +1070,7 @@
         "name": "Бластерный карабин «Рубеж»",
         "category": "weapons",
         "weapon_type": "Бластерный карабин",
-        "price": 1500,
+        "price": 2700,
         "description": "Укороченное оружие патрулей станции.",
         "purchasable": true,
         "usable": false,
@@ -1085,7 +1079,6 @@
         "photo": "",
         "damage": 24,
         "damage_type": "энергетический",
-        "range_label": "средняя",
         "local_image": "weapons/weapon_07_carbine.png"
       },
       {
@@ -1093,16 +1086,15 @@
         "name": "Бластерная винтовка «Страж»",
         "category": "weapons",
         "weapon_type": "Бластерная винтовка",
-        "price": 2000,
+        "price": 3700,
         "description": "Полноразмерная винтовка с модульным корпусом.",
         "purchasable": true,
         "usable": false,
         "transferable": true,
         "consumable": false,
         "photo": "",
-        "damage": 28,
+        "damage": 27,
         "damage_type": "энергетический",
-        "range_label": "средняя / дальняя",
         "local_image": "weapons/weapon_08_rifle.png"
       },
       {
@@ -1110,16 +1102,15 @@
         "name": "Дальнобойная винтовка «Горизонт»",
         "category": "weapons",
         "weapon_type": "Дальнобойный бластер",
-        "price": 2800,
+        "price": 5000,
         "description": "Длинноствольный бластер с оптическим прицелом.",
         "purchasable": true,
         "usable": false,
         "transferable": true,
         "consumable": false,
         "photo": "",
-        "damage": 34,
+        "damage": 30,
         "damage_type": "энергетический",
-        "range_label": "дальняя",
         "local_image": "weapons/weapon_09_long_rifle.png"
       }
     ]

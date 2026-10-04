@@ -80,6 +80,7 @@ from database import (
 from systems.characters import register_characters_handlers
 from systems.dispatch import SerialMessageView
 from systems.duels_ui import register_duel_handlers
+from systems import duels as duel_service
 from systems.weapons_ui import register_weapon_handlers
 from systems.armor_ui import register_armor_handlers
 from systems.health_ui import register_health_handlers
@@ -153,6 +154,12 @@ _owner_raw = (os.getenv("BOT_OWNER_ID") or "").strip()
 BOT_OWNER_ID = int(_owner_raw) if _owner_raw.isdigit() else 0
 if not BOT_OWNER_ID:
     print("[config] WARNING: BOT_OWNER_ID is not configured; admin role system has no owner yet.")
+
+_battle_raw = (os.getenv("BATTLE_CHAT_ID") or "").strip()
+BATTLE_CHAT_ID = int(_battle_raw) if _battle_raw.lstrip("-").isdigit() else 0
+BATTLE_CHAT_LINK = (os.getenv("BATTLE_CHAT_LINK") or "").strip()
+if not BATTLE_CHAT_ID:
+    print("[config] WARNING: BATTLE_CHAT_ID is not configured; new duel invitations will be disabled.")
 
 bot = Bot(token=TOKEN, labeler=BotLabeler(message_view=SerialMessageView()))
 
@@ -408,6 +415,18 @@ class MuteMiddleware(BaseMiddleware[Message]):
         self.stop("active mute")
 
 
+class DuelExpiryMiddleware(BaseMiddleware[Message]):
+    async def pre(self):
+        # A global sweep on every incoming event guarantees that expired duel
+        # markers cannot strand a character. Scene-sensitive systems also
+        # refresh the specific character before enforcing their restrictions.
+        try:
+            await duel_service.cleanup_expired_duels(int(time.time()))
+        except Exception as exc:
+            print(f"[duels] expiry sweep failed: {type(exc).__name__}: {exc}")
+
+
+bot.labeler.message_view.register_middleware(DuelExpiryMiddleware)
 bot.labeler.message_view.register_middleware(MuteMiddleware)
 
 
@@ -423,6 +442,7 @@ register_inventory_handlers(
         "find_inventory_item": find_inventory_item,
         "sci_line": sci_line,
         "ADMIN_CHAT_ID": ADMIN_CHAT_ID,
+        "BATTLE_CHAT_ID": BATTLE_CHAT_ID,
     }
 )
 
@@ -440,6 +460,7 @@ SHOP_RUNTIME = register_shop_handlers(
         "subtract_balance": subtract_balance,
         "add_inventory_item": add_inventory_item,
         "stabilize_attachments": stabilize_attachments,
+        "BATTLE_CHAT_ID": BATTLE_CHAT_ID,
     }
 )
 
@@ -454,6 +475,7 @@ RP_DEPS = {
     "get_character_location": get_character_location,
     "delete_message_from_chat": delete_message_from_chat,
     "sci_line": sci_line,
+    "BATTLE_CHAT_ID": BATTLE_CHAT_ID,
 }
 
 
@@ -855,7 +877,7 @@ LEGACY_ADMIN_ROUTER = build_legacy_admin_router({
 })
 
 
-register_duel_handlers(bot)
+register_duel_handlers(bot, BATTLE_CHAT_ID, BATTLE_CHAT_LINK)
 register_health_handlers(bot, ADMIN_CHAT_ID)
 register_armor_handlers(bot)
 register_weapon_handlers(bot)

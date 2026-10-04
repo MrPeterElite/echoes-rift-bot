@@ -101,8 +101,9 @@ class DuelTests(unittest.IsolatedAsyncioTestCase):
         from systems.weapons import weapon_action
         from systems.armor import armor_action
         d=await self.start()
-        self.assertEqual((await weapon_action(1,self.cid,'unequip'))['status'],'error')
-        self.assertEqual((await armor_action(1,self.cid,'unequip'))['status'],'error')
+        with patch('systems.weapons.time.time',return_value=NOW),patch('systems.armor.time.time',return_value=NOW):
+            self.assertEqual((await weapon_action(1,self.cid,'unequip'))['status'],'error')
+            self.assertEqual((await armor_action(1,self.cid,'unequip'))['status'],'error')
         d=(await self.action(1,d,'attack'))['duel']
         self.sql("CREATE TRIGGER fail_duel BEFORE UPDATE OF revision ON duels BEGIN SELECT RAISE(ABORT,'test'); END")
         with patch('systems.duels.secrets.randbelow',return_value=0),self.assertRaises(db.aiosqlite.IntegrityError):
@@ -139,5 +140,34 @@ class DuelTests(unittest.IsolatedAsyncioTestCase):
         msg.payload=button['payload']
         with patch('systems.duels_ui.time.time',return_value=NOW):await h['duel_button'](msg)
         self.assertEqual((await vitals.get_health(self.cid,NOW))['hp'],100)
+
+    async def test_separate_battle_chat_keeps_origin_location(self):
+        battle_peer=PEER+99
+        r=await duels.invite(1,PEER,self.cids[1],NOW,battle_peer)
+        d=r['duel']
+        self.assertEqual((d['origin_peer'],d['battle_peer']),(PEER,battle_peer))
+        accepted=await duels.act(2,PEER,d['id'],d['revision'],'accept',NOW)
+        self.assertTrue(accepted.get('battle_started'))
+        d=accepted['duel']
+        self.assertEqual((await duels.panel(1,PEER,NOW))['redirect_peer'],battle_peer)
+        self.assertEqual((await duels.panel(1,battle_peer,NOW))['duel']['id'],d['id'])
+        self.assertNotIn('duel',await duels.act(1,PEER,d['id'],d['revision'],'attack',NOW))
+        loc=await db.get_character_location(self.cid)
+        self.assertEqual(loc[0],'arena')
+
+    async def test_try_and_movement_blocked_during_active_duel(self):
+        await self.start()
+        import main
+        msg=base.Message(1,'/try мгновенно победить',PEER)
+        with patch('systems.rp.time.time',return_value=NOW):
+            self.assertTrue(await main.handle_rp_command(msg,main.bot,main.RP_DEPS))
+        self.assertIn('/try недоступен',msg.answers[-1])
+        self.sql("INSERT INTO locations(code,name,peer_id,invite_link) VALUES ('other','Other',?,'x')",(PEER+50,))
+        handlers={x.handler.__name__:x.handler for x in main.bot.labeler.message_view.handlers}
+        move=base.Message(1,'/перейти other',PEER)
+        with patch('systems.locations.time.time',return_value=NOW):
+            await handlers['move_location_handler'](move,'other')
+        self.assertIn('Нельзя покинуть',move.answers[-1])
+        self.assertEqual((await db.get_character_location(self.cid))[0],'arena')
 
 if __name__=='__main__':unittest.main()

@@ -16,7 +16,7 @@ from systems.weapons import ensure_weapon_tables
 from systems.duels import ensure_duel_tables
 
 from systems.quiet_panels import ensure_panel_tables
-VERSION = "quiet-duels-1"
+VERSION = "combat-1.5-battle-chat-1"
 
 
 def backup_before_migration():

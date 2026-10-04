@@ -8,6 +8,7 @@ from systems.vitals import use_health_item
 from systems.armor import list_armor
 from systems.weapons import list_weapons
 from systems.item_effects import describe_effect
+from systems import duels
 from pathlib import Path
 
 
@@ -277,14 +278,23 @@ def register_inventory_handlers(bot, deps):
         if not inv_item:
             await message.answer("Предмет с таким номером не найден.")
             return
-        _, item_name, _ = inv_item
+        category, item_name, _ = inv_item
         catalog_item = find_catalog_item(item_name)
+        if category in {"food", "medicine", "armor", "weapons"}:
+            await duels.refresh_character_scene(sender[0], int(time.time()))
+            await duels.refresh_character_scene(receiver[0], int(time.time()))
         if catalog_item and not catalog_item.get("transferable", True):
             await message.answer("Этот предмет нельзя передавать.")
             return
         ok, reason = await transfer_inventory_item(sender[0], receiver[0], item_name, quantity)
         if not ok:
-            await message.answer("У вас недостаточно таких предметов." if reason == "not_enough" else "У вас нет такого предмета.")
+            if reason == "in_combat":
+                await message.answer(
+                    "⛔ Боевые расходники нельзя передавать во время активной боевой сцены.\n"
+                    "В бой допускаются только предметы, которые были у участников заранее."
+                )
+            else:
+                await message.answer("У вас недостаточно таких предметов." if reason == "not_enough" else "У вас нет такого предмета.")
             return
         await message.answer(
             f"🟢 ПРЕДМЕТ ПЕРЕДАН\n{sci_line()}\n\n"

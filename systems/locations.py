@@ -1,3 +1,6 @@
+import time
+from systems import duels
+
 def register_locations_handlers(bot, deps):
     get_location_by_peer = deps["get_location_by_peer"]
     get_characters_in_location = deps["get_characters_in_location"]
@@ -117,6 +120,20 @@ def register_locations_handlers(bot, deps):
 
         if character[10] != "approved":
             await message.answer("Переходы доступны только после одобрения квенты.")
+            return
+
+        scene = await duels.refresh_character_scene(character[0], int(time.time()))
+        if scene["in_scene"]:
+            if scene["in_duel"]:
+                await message.answer(
+                    "⛔ Нельзя покинуть локацию во время активной дуэли.\n"
+                    "Завершите бой, сдавайтесь или договоритесь о ничьей."
+                )
+            else:
+                await message.answer(
+                    "⛔ Нельзя сменить RP-локацию во время активной боевой сцены.\n"
+                    "Сначала завершите сцену через ведущего/администрацию."
+                )
             return
 
         code = code.lower().strip()

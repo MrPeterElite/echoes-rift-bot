@@ -46,12 +46,18 @@ async def _state(conn, cid, now):
 
 
 async def get_health(cid, now):
+    # Public reads also refresh an expired duel marker. duels.py itself uses
+    # _state directly while holding its transaction, so this does not recurse.
+    from systems import duels
+    await duels.refresh_character_scene(cid, now)
     async with db._transaction() as conn:
         return await _state(conn, cid, now)
 
 
 async def use_health_item(uid, cid, item, now, expected=None):
     """Quote partial/replacement use, then revalidate the exact quote on confirmation."""
+    from systems import duels
+    await duels.refresh_character_scene(cid, now)
     effect = item.get('effect', {})
     async with db._transaction() as conn:
         cursor = await conn.execute("SELECT 1 FROM characters WHERE id=? AND user_id=? AND status='approved'", (cid, uid))

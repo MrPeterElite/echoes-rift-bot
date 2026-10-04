@@ -1,6 +1,8 @@
 import json
+import time
 from systems.item_effects import describe_effect
 from database import purchase_item
+from systems import duels
 from pathlib import Path
 
 
@@ -182,6 +184,15 @@ def register_shop_handlers(bot, deps):
             await message.answer("Покупки доступны только после одобрения квенты.")
             return True
 
+        if item.get("category") in {"food", "medicine", "armor", "weapons"}:
+            scene = await duels.refresh_character_scene(character[0], int(time.time()))
+            if scene["in_scene"]:
+                await message.answer(
+                    "⛔ Боевые расходники и экипировку нельзя покупать во время активной боевой сцены.\n"
+                    "Использовать в дуэли можно только то, что было у персонажа до её начала."
+                )
+                return True
+
         if not item.get("purchasable", True):
             await message.answer(
                 "🔒 Этот интерьер нельзя купить за CR.\n"
@@ -210,7 +221,12 @@ def register_shop_handlers(bot, deps):
 
         ok, reason = await purchase_item(message.from_id, character[0], item, quantity)
         if not ok:
-            await message.answer("Покупка не выполнена: недостаточно средств или товар больше недоступен.")
+            if reason == "in_combat":
+                await message.answer("⛔ Покупка боевых предметов недоступна во время активной боевой сцены.")
+            elif reason == "not_enough_money":
+                await message.answer("Покупка не выполнена: недостаточно средств.")
+            else:
+                await message.answer("Покупка не выполнена: товар больше недоступен или состояние изменилось.")
             return True
         item_emoji = {
             "Сухпаёк": "🍱",
