@@ -1,2 +1,1 @@
-Актуальная накопительная сборка: Echoes_Rift_Armor_Patch.zip.
-Инструкция: INSTALL_ARMOR.txt.
+Накопительное обновление: shop.zip. Инструкция: INSTALL_WEAPONS.txt.

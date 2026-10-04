@@ -79,6 +79,7 @@ from database import (
 
 from systems.characters import register_characters_handlers
 from systems.dispatch import SerialMessageView
+from systems.weapons_ui import register_weapon_handlers
 from systems.armor_ui import register_armor_handlers
 from systems.health_ui import register_health_handlers
 from systems.legacy_admin import build_legacy_admin_router
@@ -855,6 +856,7 @@ LEGACY_ADMIN_ROUTER = build_legacy_admin_router({
 
 register_health_handlers(bot, ADMIN_CHAT_ID)
 register_armor_handlers(bot)
+register_weapon_handlers(bot)
 
 
 @bot.on.message()

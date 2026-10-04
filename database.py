@@ -1614,6 +1614,14 @@ async def _debit(db, user_id, amount):
 
 
 async def _put_item(db, character_id, category, name, quantity):
+    if category == 'weapons':
+        catalog = json.loads((_PROJECT_ROOT/'shop_items.json').read_text(encoding='utf-8'))
+        item = next((i for i in catalog['weapons']['items'] if i['name'] == name), None)
+        if not item or not isinstance(quantity,int) or not 0 < quantity <= 100:
+            raise ValueError('Invalid weapon reward')
+        await db.executemany('INSERT INTO weapon_instances(character_id,item_code,name,weapon_type) VALUES (?,?,?,?)',
+            [(character_id,item['code'],item['name'],item['weapon_type'])]*quantity)
+        return
     if category == 'armor':
         catalog = json.loads((_PROJECT_ROOT/'shop_items.json').read_text(encoding='utf-8'))
         item = next((i for i in catalog['armor']['items'] if i['name'] == name), None)
@@ -1640,7 +1648,7 @@ async def _take_item(db, character_id, name, quantity):
 
 
 async def _delete_character_state(db, cid):
-    for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations', 'character_health', 'armor_instances'):
+    for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations', 'character_health', 'armor_instances', 'weapon_instances'):
         await db.execute(f'DELETE FROM {table} WHERE character_id = ?', (cid,))
     await db.execute('DELETE FROM characters WHERE id = ?', (cid,))
 
@@ -1661,6 +1669,8 @@ async def purchase_item(user_id, character_id, item, quantity):
         if item.get('required_faction') and character[0] != item['required_faction']:
             return False, 'faction'
         if item.get('category') == 'armor' and (quantity > 100 or not isinstance(item.get('max_durability'),int) or not 0 < item['max_durability'] <= 10000 or price <= 0):
+            return False, 'invalid_quantity'
+        if item.get('category') == 'weapons' and quantity > 100:
             return False, 'invalid_quantity'
         if not await _debit(db, user_id, price * quantity):
             return False, 'not_enough_money'

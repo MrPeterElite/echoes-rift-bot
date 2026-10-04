@@ -10,6 +10,7 @@ SHOP_CATEGORIES = {
     "🛠 Инструменты": "tools",
     "🪑 Интерьер каюты": "furniture",
     "🛡 Броня": "armor",
+    "🔫 Оружие": "weapons",
 }
 
 
@@ -89,6 +90,7 @@ def register_shop_handlers(bot, deps):
         .add(Text("🪑 Интерьер каюты"), color=KeyboardButtonColor.PRIMARY)
         .row()
         .add(Text("🛡 Броня"), color=KeyboardButtonColor.PRIMARY)
+        .add(Text("🔫 Оружие"), color=KeyboardButtonColor.PRIMARY)
         .row()
         .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
     )
@@ -243,7 +245,7 @@ def register_shop_handlers(bot, deps):
         quantity_text = f" ×{quantity}" if quantity > 1 else ""
         await message.answer(
             f"✅ Куплено: {item_emoji} {item['name']}{quantity_text}\n"
-            f"💳 -{total} CR" + ("\nОткрыть бронежилеты: /бронежилеты" if item.get("category")=="armor" else ""),
+            f"💳 -{total} CR" + ("\nОткрыть бронежилеты: /бронежилеты" if item.get("category")=="armor" else "\nВыбрать оружие: /оружие" if item.get("category")=="weapons" else ""),
             keyboard=item_keyboard(item).get_json(),
         )
         return True

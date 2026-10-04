@@ -1,3 +1,5 @@
+from systems.weapon_stats import describe_weapon
+
 FOOD_DURATION = 30 * 60
 FOOD_CAP = 30
 BASIC_HEAL_LIMIT = 20
@@ -15,6 +17,8 @@ def describe_effect(item):
         limit = (f"Бинтами и гемостатиками вместе: до {BASIC_HEAL_LIMIT} HP до полного выздоровления."
                  if effect['group']=='basic' else "В бою — один раз на персонажа.")
         return f"❤️ Восстанавливает {effect['amount']} HP.\n{limit}"
+    if item.get('category') == 'weapons':
+        return f"🔫 Тип: {item['weapon_type']}\n" + describe_weapon(item) + "\nПостоянное оружие. Выбор и передача — вне боя."
     if item.get('category') == 'armor':
         return (f"🛡 Прочность: {item['max_durability']}/{item['max_durability']}\n"
                 "Принимает урон вместо здоровья. Не исчезает при поломке.\n"

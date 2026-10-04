@@ -17,7 +17,9 @@ def format_health(character, state, now):
         f"❤️ Здоровье: {state['hp']}/{state['max_hp']}\n"
         f"🍽 Запас от еды: {state['food_hp']}/{state['food_max']} HP · {food_time}\n"
         f"🛡 Броня: {state['armor']}/{state['max_armor']} · {state.get('armor_name','не экипирована')}\n\n"
-        f"🩹 Доступно лечения бинтами/гемостатиками: {BASIC_HEAL_LIMIT-state['basic_healed']}/{BASIC_HEAL_LIMIT} HP\n"
+        f"🔫 Оружие: {state.get('weapon_name','не выбрано')}"
+        + (f" · {state['weapon_type']} · урон {state['weapon_damage']}" if state.get('weapon_type') else '') + '\n\n'
+        + f"🩹 Доступно лечения бинтами/гемостатиками: {BASIC_HEAL_LIMIT-state['basic_healed']}/{BASIC_HEAL_LIMIT} HP\n"
         + (f"🧰 Медкомплект в сцене: {'использован' if state['medkit_used'] else 'доступен'}\n" if state['scene_key'] else '')
         + ('⚔️ Идёт сцена. Действия учитывает ведущий.' if state['scene_key'] else '📍 Вне боевой сцены.')
         + ('\n⚠️ 0 HP: требуется помощь ведущего; обычное лечение недоступно.' if state['hp']==0 else '')
@@ -40,7 +42,7 @@ def register_health_handlers(bot, admin_chat):
         now = int(time.time())
         kwargs = {}
         if message.peer_id == message.from_id:
-            kwargs['keyboard'] = Keyboard().add(Text('🛡 Моя броня'),color=KeyboardButtonColor.PRIMARY).row().add(Text('⬅️ Профиль'),color=KeyboardButtonColor.SECONDARY).get_json()
+            kwargs['keyboard'] = Keyboard().add(Text('🛡 Моя броня'),color=KeyboardButtonColor.PRIMARY).row().add(Text('🔫 Моё оружие'),color=KeyboardButtonColor.PRIMARY).row().add(Text('⬅️ Профиль'),color=KeyboardButtonColor.SECONDARY).get_json()
         await message.answer(format_health(character,await get_health(character[0],now),now),**kwargs)
 
     @bot.on.message(text=['/здоровье <args>','/урон <args>','/броня <args>','/сценастарт <args>','/сценаконец <args>'])

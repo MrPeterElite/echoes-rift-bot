@@ -1,5 +1,6 @@
 """Persistent health and atomic consumables. Scene markers do not resolve combat."""
 import uuid
+from systems.weapon_stats import weapon_stats
 
 import database as db
 from systems.item_effects import FOOD_DURATION, FOOD_CAP, BASIC_HEAL_LIMIT
@@ -36,6 +37,11 @@ async def _state(conn, cid, now):
         return None
     result = dict(zip([c[0] for c in cursor.description], row))
     result['armor_name'] = equipped[0] if equipped else 'не экипирована'
+    cursor = await conn.execute('SELECT name,weapon_type,item_code FROM weapon_instances WHERE character_id=? AND equipped=1',(cid,))
+    weapon = await cursor.fetchone()
+    result['weapon_name'] = weapon[0] if weapon else 'не выбрано'
+    result['weapon_type'] = weapon[1] if weapon else ''
+    result['weapon_damage'] = weapon_stats(weapon[2]).get('damage',0) if weapon else 0
     return result
 
 
