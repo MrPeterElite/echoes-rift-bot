@@ -315,7 +315,7 @@
         "price": 40,
         "rarity": "⚪ Обычный",
         "category": "medicine",
-        "description": "Стерильный медицинский бинт для перевязки ран и фиксации повязок. Базовое средство первой помощи, которое стоит держать под рукой каждому жителю станции.",
+        "description": "Перевязка лёгких ран.",
         "photo": "photo1087549445_457239453_0cbe3b262016444b6e",
         "messages": [
           "🩹 {name} аккуратно накладывает стерильный бинт на повреждённый участок и закрепляет повязку.",
@@ -359,7 +359,7 @@
         "price": 100,
         "rarity": "⚪ Обычный",
         "category": "medicine",
-        "description": "Одноразовое кровоостанавливающее средство для экстренной обработки открытых ран. Помогает временно контролировать кровотечение до получения полноценной медицинской помощи.",
+        "description": "Средство для остановки кровотечения.",
         "photo": "photo1087549445_457239455_4eb34988e6b6607b24",
         "messages": [
           "🩸 {name} вскрывает упаковку гемостатика и плотно прижимает средство к кровоточащей ране.",
@@ -444,7 +444,7 @@
         "price": 400,
         "rarity": "🟣 Эпический",
         "category": "medicine",
-        "description": "Компактный набор для оказания расширенной первой помощи вне медблока. Содержит перевязочные материалы, кровоостанавливающие средства и базовые инструменты для стабилизации пострадавшего.",
+        "description": "Набор для помощи при серьёзных ранениях.",
         "photo": "photo1087549445_457239461_201193e10858489aee",
         "messages": [
           "🧰 {name} раскрывает полевой медицинский комплект и начинает последовательно обрабатывать полученные повреждения.",
@@ -874,6 +874,95 @@
         "local_image": "cabins/order_of_veil.png",
         "required_faction": "🕯️ ОРДЕН ЗАВЕСЫ",
         "required_faction_label": "Орден Завесы"
+      }
+    ]
+  },
+  "armor": {
+    "title": "🛡 Броня",
+    "items": [
+      {
+        "code": "armor_civilian",
+        "name": "Гражданский защитный жилет",
+        "price": 200,
+        "category": "armor",
+        "description": "Лёгкая защита для жителей станции.",
+        "rarity": "🛡 Бронежилет",
+        "max_durability": 15,
+        "usable": false,
+        "transferable": true,
+        "consumable": false,
+        "photo": "",
+        "local_image": "armor/armor_01_civilian.png"
+      },
+      {
+        "code": "armor_reinforced",
+        "name": "Усиленный гражданский жилет",
+        "price": 400,
+        "category": "armor",
+        "description": "Усиленные вставки для опасных участков станции.",
+        "rarity": "🛡 Бронежилет",
+        "max_durability": 25,
+        "usable": false,
+        "transferable": true,
+        "consumable": false,
+        "photo": "",
+        "local_image": "armor/armor_02_reinforced.png"
+      },
+      {
+        "code": "armor_service",
+        "name": "Служебный бронежилет",
+        "price": 700,
+        "category": "armor",
+        "description": "Защитный комплект для станционного персонала.",
+        "rarity": "🛡 Бронежилет",
+        "max_durability": 35,
+        "usable": false,
+        "transferable": true,
+        "consumable": false,
+        "photo": "",
+        "local_image": "armor/armor_03_service.png"
+      },
+      {
+        "code": "armor_tactical",
+        "name": "Тактический бронежилет",
+        "price": 1100,
+        "category": "armor",
+        "description": "Модульная броня для боевых выходов.",
+        "rarity": "🛡 Бронежилет",
+        "max_durability": 45,
+        "usable": false,
+        "transferable": true,
+        "consumable": false,
+        "photo": "",
+        "local_image": "armor/armor_04_tactical.png"
+      },
+      {
+        "code": "armor_heavy",
+        "name": "Тяжёлый бронежилет",
+        "price": 1700,
+        "category": "armor",
+        "description": "Массивная защита для тяжёлых столкновений.",
+        "rarity": "🛡 Бронежилет",
+        "max_durability": 60,
+        "usable": false,
+        "transferable": true,
+        "consumable": false,
+        "photo": "",
+        "local_image": "armor/armor_05_heavy.png"
+      },
+      {
+        "code": "armor_assault",
+        "name": "Штурмовой бронежилет",
+        "price": 2600,
+        "category": "armor",
+        "description": "Усиленный комплект для штурмовых операций.",
+        "rarity": "🛡 Бронежилет",
+        "max_durability": 80,
+        "usable": false,
+        "transferable": true,
+        "consumable": false,
+        "photo": "",
+        "local_image": "armor/armor_06_assault.png"
       }
     ]
   }

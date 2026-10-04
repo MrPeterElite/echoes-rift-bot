@@ -995,18 +995,11 @@ async def get_inventory(character_id):
 
 
 async def add_inventory_item(character_id, category, item_name, quantity):
-    await ensure_inventory_tables()
-    db = await connect()
+    if not isinstance(quantity, int) or quantity <= 0:
+        raise ValueError('Invalid quantity')
+    async with _transaction() as conn:
+        await _put_item(conn, character_id, category, item_name, quantity)
 
-    await db.execute("""
-        INSERT INTO inventory (character_id, category, item_name, quantity)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(character_id, category, item_name)
-        DO UPDATE SET quantity = quantity + excluded.quantity
-    """, (character_id, category, item_name, quantity))
-
-    await db.commit()
-    await db.close()
 
 
 async def remove_inventory_item(character_id, item_name, quantity):
@@ -1456,12 +1449,7 @@ async def redeem_promo_code(code, vk_user_id, character_id, now):
                     (amount, vk_user_id)
                 )
             elif reward_type == 'item':
-                await db.execute("""
-                    INSERT INTO inventory (character_id, category, item_name, quantity)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(character_id, category, item_name)
-                    DO UPDATE SET quantity = quantity + excluded.quantity
-                """, (character_id, item_category, item_name, amount))
+                await _put_item(db, character_id, item_category, item_name, amount)
 
         await db.execute("""
             INSERT INTO promo_redemptions (promo_code_id, vk_user_id, character_id, redeemed_at)
@@ -1626,6 +1614,14 @@ async def _debit(db, user_id, amount):
 
 
 async def _put_item(db, character_id, category, name, quantity):
+    if category == 'armor':
+        catalog = json.loads((_PROJECT_ROOT/'shop_items.json').read_text(encoding='utf-8'))
+        item = next((i for i in catalog['armor']['items'] if i['name'] == name), None)
+        if not item or not isinstance(quantity,int) or not 0 < quantity <= 100:
+            raise ValueError('Invalid armor reward')
+        await db.executemany('INSERT INTO armor_instances(character_id,item_code,name,durability,max_durability,price) VALUES (?,?,?,?,?,?)',
+            [(character_id,item['code'],item['name'],item['max_durability'],item['max_durability'],item['price'])]*quantity)
+        return
     await db.execute('''INSERT INTO inventory(character_id, category, item_name, quantity) VALUES (?, ?, ?, ?)
         ON CONFLICT(character_id, category, item_name) DO UPDATE SET quantity = quantity + excluded.quantity''',
         (character_id, category, name, quantity))
@@ -1644,7 +1640,7 @@ async def _take_item(db, character_id, name, quantity):
 
 
 async def _delete_character_state(db, cid):
-    for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations', 'character_health'):
+    for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations', 'character_health', 'armor_instances'):
         await db.execute(f'DELETE FROM {table} WHERE character_id = ?', (cid,))
     await db.execute('DELETE FROM characters WHERE id = ?', (cid,))
 
@@ -1664,9 +1660,14 @@ async def purchase_item(user_id, character_id, item, quantity):
             return False, 'character_invalid'
         if item.get('required_faction') and character[0] != item['required_faction']:
             return False, 'faction'
+        if item.get('category') == 'armor' and (quantity > 100 or not isinstance(item.get('max_durability'),int) or not 0 < item['max_durability'] <= 10000 or price <= 0):
+            return False, 'invalid_quantity'
         if not await _debit(db, user_id, price * quantity):
             return False, 'not_enough_money'
-        await _put_item(db, character_id, item['category'], item['name'], quantity)
+        if item.get('category') == 'armor':
+            await db.executemany('INSERT INTO armor_instances(character_id,item_code,name,durability,max_durability,price) VALUES (?,?,?,?,?,?)', [(character_id,item['code'],item['name'],item['max_durability'],item['max_durability'],price)]*quantity)
+        else:
+            await _put_item(db, character_id, item['category'], item['name'], quantity)
         return True, 'ok'
 
 

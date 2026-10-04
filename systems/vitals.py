@@ -26,9 +26,17 @@ async def ensure_health_tables():
 async def _state(conn, cid, now):
     await conn.execute('INSERT OR IGNORE INTO character_health(character_id) SELECT id FROM characters WHERE id=?', (cid,))
     await conn.execute("UPDATE character_health SET food_hp=0, food_max=0, food_expires=0 WHERE character_id=? AND scene_key='' AND food_expires<=?", (cid, now))
+    cursor = await conn.execute('SELECT name,durability,max_durability FROM armor_instances WHERE character_id=? AND equipped=1',(cid,))
+    equipped = await cursor.fetchone()
+    if equipped:
+        await conn.execute('UPDATE character_health SET armor=?,max_armor=? WHERE character_id=?',(equipped[1],equipped[2],cid))
     cursor = await conn.execute('SELECT * FROM character_health WHERE character_id=?', (cid,))
     row = await cursor.fetchone()
-    return dict(zip([c[0] for c in cursor.description], row)) if row else None
+    if not row:
+        return None
+    result = dict(zip([c[0] for c in cursor.description], row))
+    result['armor_name'] = equipped[0] if equipped else 'не экипирована'
+    return result
 
 
 async def get_health(cid, now):
@@ -116,7 +124,23 @@ async def admin_health_action(admin_id, action, ids, values, now):
             current, maximum = values
             if not 0 <= current <= maximum <= 10000:
                 return False,'Нужно 0 ≤ броня ≤ максимум ≤ 10000.'
+            cursor = await conn.execute('SELECT id,max_durability FROM armor_instances WHERE character_id=? AND equipped=1',(ids[0],))
+            equipped = await cursor.fetchone()
+            if equipped:
+                if maximum != equipped[1]:
+                    return False,'Максимальная прочность жилета неизменна.'
+                await conn.execute('UPDATE armor_instances SET durability=? WHERE id=?',(current,equipped[0]))
             await conn.execute('UPDATE character_health SET armor=?,max_armor=? WHERE character_id=?',(current,maximum,ids[0]))
+        elif action=='damage':
+            amount = values[0]
+            if not 0 < amount <= 1000000:
+                return False,'Урон должен быть от 1 до 1000000.'
+            s = states[0]
+            absorbed = min(s['armor'],amount)
+            food_loss = min(s['food_hp'], amount-absorbed)
+            hp_loss = min(s['hp'], amount-absorbed-food_loss)
+            await conn.execute('UPDATE armor_instances SET durability=? WHERE character_id=? AND equipped=1',(s['armor']-absorbed,ids[0]))
+            await conn.execute('UPDATE character_health SET armor=?,food_hp=?,hp=? WHERE character_id=?',(s['armor']-absorbed,s['food_hp']-food_loss,s['hp']-hp_loss,ids[0]))
         elif action=='start':
             if any(s['scene_key'] or s['hp']==0 for s in states):
                 return False,'Участник уже в сцене или имеет 0 HP.'

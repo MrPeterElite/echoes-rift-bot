@@ -16,7 +16,7 @@ def format_health(character, state, now):
         f"СОСТОЯНИЕ ПЕРСОНАЖА\n{character[2]} · #{character[0]}\n━━━━━━━━━━━━━━━━━━━━\n"
         f"❤️ Здоровье: {state['hp']}/{state['max_hp']}\n"
         f"🍽 Запас от еды: {state['food_hp']}/{state['food_max']} HP · {food_time}\n"
-        f"🛡 Броня: {state['armor']}/{state['max_armor']}\n\n"
+        f"🛡 Броня: {state['armor']}/{state['max_armor']} · {state.get('armor_name','не экипирована')}\n\n"
         f"🩹 Доступно лечения бинтами/гемостатиками: {BASIC_HEAL_LIMIT-state['basic_healed']}/{BASIC_HEAL_LIMIT} HP\n"
         + (f"🧰 Медкомплект в сцене: {'использован' if state['medkit_used'] else 'доступен'}\n" if state['scene_key'] else '')
         + ('⚔️ Идёт сцена. Действия учитывает ведущий.' if state['scene_key'] else '📍 Вне боевой сцены.')
@@ -40,10 +40,10 @@ def register_health_handlers(bot, admin_chat):
         now = int(time.time())
         kwargs = {}
         if message.peer_id == message.from_id:
-            kwargs['keyboard'] = Keyboard().add(Text('⬅️ Профиль'),color=KeyboardButtonColor.SECONDARY).get_json()
+            kwargs['keyboard'] = Keyboard().add(Text('🛡 Моя броня'),color=KeyboardButtonColor.PRIMARY).row().add(Text('⬅️ Профиль'),color=KeyboardButtonColor.SECONDARY).get_json()
         await message.answer(format_health(character,await get_health(character[0],now),now),**kwargs)
 
-    @bot.on.message(text=['/здоровье <args>','/броня <args>','/сценастарт <args>','/сценаконец <args>'])
+    @bot.on.message(text=['/здоровье <args>','/урон <args>','/броня <args>','/сценастарт <args>','/сценаконец <args>'])
     async def health_admin(message, args=None):
         if message.peer_id != admin_chat:
             await message.answer('Команда доступна только администрации в административном чате.')
@@ -51,7 +51,9 @@ def register_health_handlers(bot, admin_chat):
         command = message.text.split()[0]
         try:
             numbers = [int(v) for v in (args or '').split()]
-            if command=='/здоровье' and len(numbers)==2:
+            if command=='/урон' and len(numbers)==2:
+                action, ids, values = 'damage',numbers[:1],numbers[1:]
+            elif command=='/здоровье' and len(numbers)==2:
                 action, ids, values = 'hp',numbers[:1],numbers[1:]
             elif command=='/броня' and len(numbers)==3:
                 action, ids, values = 'armor',numbers[:1],numbers[1:]
@@ -62,7 +64,7 @@ def register_health_handlers(bot, admin_chat):
             else:
                 raise ValueError
         except ValueError:
-            await message.answer('Форматы:\n/здоровье ID HP\n/броня ID текущее максимум\n/сценастарт ID [ID ...]\n/сценаконец ID участника')
+            await message.answer('Форматы:\n/урон ID сумма\n/здоровье ID HP\n/броня ID текущее максимум\n/сценастарт ID [ID ...]\n/сценаконец ID участника')
             return
         ok, text = await admin_health_action(message.from_id,action,ids,values,int(time.time()))
         await message.answer(('✅ ' if ok else '⛔ ')+text)

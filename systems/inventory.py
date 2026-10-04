@@ -5,6 +5,7 @@ import time
 import database as db
 from vkbottle import Keyboard, Text, KeyboardButtonColor
 from systems.vitals import use_health_item
+from systems.armor import list_armor
 from systems.item_effects import describe_effect
 from pathlib import Path
 
@@ -173,7 +174,9 @@ def register_inventory_handlers(bot, deps):
         if not character:
             await message.answer("Персонаж не найден.")
             return
-        await message.answer(format_inventory(character, await get_inventory(character[0]), sci_line))
+        armor = await list_armor(character[0])
+        extra = f"\n\n🛡 Бронежилетов: {len(armor)}. Открыть: /бронежилеты" if armor else ""
+        await message.answer(format_inventory(character, await get_inventory(character[0]), sci_line)+extra)
 
     @bot.on.message(text="/использовать <number>")
     async def use_item_handler(message, number=None):
