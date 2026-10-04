@@ -1648,6 +1648,9 @@ async def _take_item(db, character_id, name, quantity):
 
 
 async def _delete_character_state(db, cid):
+    from systems.duels import one, finish
+    duel=await one(db,'SELECT d.* FROM duels d JOIN duel_members m ON m.duel_id=d.id WHERE m.character_id=?',(cid,))
+    if duel:await finish(db,duel,'Персонаж удалён. Дуэль отменена без победителя.')
     for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations', 'character_health', 'armor_instances', 'weapon_instances'):
         await db.execute(f'DELETE FROM {table} WHERE character_id = ?', (cid,))
     await db.execute('DELETE FROM characters WHERE id = ?', (cid,))

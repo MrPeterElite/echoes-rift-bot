@@ -21,13 +21,13 @@ def format_health(character, state, now):
         + (f" · {state['weapon_type']} · урон {state['weapon_damage']}" if state.get('weapon_type') else '') + '\n\n'
         + f"🩹 Доступно лечения бинтами/гемостатиками: {BASIC_HEAL_LIMIT-state['basic_healed']}/{BASIC_HEAL_LIMIT} HP\n"
         + (f"🧰 Медкомплект в сцене: {'использован' if state['medkit_used'] else 'доступен'}\n" if state['scene_key'] else '')
-        + ('⚔️ Идёт сцена. Действия учитывает ведущий.' if state['scene_key'] else '📍 Вне боевой сцены.')
+        + ('⚔️ Идёт дуэль. Действия: /дуель.' if state['scene_key'].startswith('duel:') else '⚔️ Идёт сцена. Действия учитывает ведущий.' if state['scene_key'] else '📍 Вне боевой сцены.')
         + ('\n⚠️ 0 HP: требуется помощь ведущего; обычное лечение недоступно.' if state['hp']==0 else '')
     )
 
 
 def register_health_handlers(bot, admin_chat):
-    @bot.on.message(text=['/состояние','❤️ Состояние','/дуель'])
+    @bot.on.message(text=['/состояние','❤️ Состояние'])
     async def health_card(message):
         character = await db.get_character_by_user(message.from_id)
         if not character or character[10] != 'approved':

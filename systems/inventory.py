@@ -103,6 +103,7 @@ def register_inventory_handlers(bot, deps):
             return
         if status != 'ok':
             errors = {
+                'duel_only':'В дуэли используйте кнопку лечения в /дуель: лечение расходует ход.',
                 'invalid_character':'Нужна ваша одобренная квента.',
                 'incapacitated':'При 0 HP требуется помощь ведущего; предмет не потрачен.',
                 'in_combat':'Во время сцены нельзя обновлять запас еды.',

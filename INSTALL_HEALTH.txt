@@ -1,1 +1,1 @@
-Накопительное обновление: shop.zip. Инструкция: INSTALL_WEAPONS.txt.
+Накопительное обновление: duel.zip. Инструкция: INSTALL_DUELS.txt.

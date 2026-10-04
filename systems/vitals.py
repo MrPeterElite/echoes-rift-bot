@@ -58,6 +58,8 @@ async def use_health_item(uid, cid, item, now, expected=None):
         if not await cursor.fetchone():
             return {'status':'invalid_character'}
         state = await _state(conn, cid, now)
+        if state['scene_key'].startswith('duel:'):
+            return {'status':'duel_only'}
         if state['hp'] == 0:
             return {'status':'incapacitated'}
         kind = effect.get('type')
@@ -119,6 +121,11 @@ async def admin_health_action(admin_id, action, ids, values, now):
             states.append(state)
         if not states:
             return False, 'Укажите персонажей.'
+        if any(s['scene_key'].startswith('duel:') for s in states):
+            if action!='end':return False,'Для исправления состояния сначала завершите дуэль через /сценаконец.'
+            from systems.duels import one, finish
+            duel=await one(conn,'SELECT * FROM duels WHERE id=?',(int(states[0]['scene_key'].split(':')[1]),))
+            if duel:await finish(conn,duel,'Дуэль завершена администрацией.')
         if action=='hp':
             hp = values[0]
             if not 0 <= hp <= states[0]['max_hp']:

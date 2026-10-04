@@ -13,7 +13,9 @@ from systems.armor import ensure_armor_tables
 
 from systems.weapons import ensure_weapon_tables
 
-VERSION = "weapons-1"
+from systems.duels import ensure_duel_tables
+
+VERSION = "duels-1"
 
 
 def backup_before_migration():
@@ -41,7 +43,7 @@ async def initialize_database():
     for migration in (
         db.create_tables, db.ensure_career_columns, db.ensure_faction_rank_columns,
         db.ensure_quest_tables, db.ensure_housing_tables, db.ensure_location_tables,
-        db.ensure_inventory_tables, db.ensure_core_update_tables, db.ensure_stability_tables, ensure_health_tables, ensure_armor_tables, ensure_weapon_tables,
+        db.ensure_inventory_tables, db.ensure_core_update_tables, db.ensure_stability_tables, ensure_health_tables, ensure_armor_tables, ensure_weapon_tables, ensure_duel_tables,
     ):
         await migration()
     async with db._transaction() as connection:
