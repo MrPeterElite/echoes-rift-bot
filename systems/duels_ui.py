@@ -4,9 +4,11 @@ from vkbottle import Keyboard, Text, KeyboardButtonColor
 from systems import duels
 from systems.vitals import get_health
 import database as db
+from systems.quiet_panels import quiet_handlers
 
 
 def register_duel_handlers(bot):
+    quiet = quiet_handlers(bot)
     async def show(message,result):
         text=result.get('text','')
         kb=Keyboard(inline=True)
@@ -49,9 +51,11 @@ def register_duel_handlers(bot):
         await message.answer(text or 'Откройте /дуель.',**({'keyboard':json.dumps(data,ensure_ascii=False)} if data['buttons'] else {}))
 
     @bot.on.message(text='/дуель')
+    @quiet
     async def duel_panel(message):await show(message,await duels.panel(message.from_id,message.peer_id,int(time.time())))
 
     @bot.on.message(text=['Вызвать #<target>','Предыдущие соперники','Следующие соперники','✅ Принять бой','❌ Отказаться','Отменить вызов','⚔️ Атаковать','🛡 Блок','💨 Уклонение','💊 Лечение','🤝 Завершить по согласию','🏳 Сдаться','Подтвердить сдачу','Лечить: <label>'])
+    @quiet
     async def duel_button(message,**kwargs):
         try:
             payload=getattr(message,'payload',None) or {}
@@ -89,4 +93,5 @@ def register_duel_handlers(bot):
                 kb.add(Text(f'Лечить: +{gain} HP · ' + {'bandage':'Бинт','hemostatic':'Гемостатик','field_medkit':'Медкомплект'}.get(item['code'],'Предмет'),payload={'duel':did,'rev':rev,'action':'heal:'+item['code']}));count+=1
             await message.answer('Нажатие потратит один предмет и ваш ход. /дуель — вернуться.' if count else 'Доступного лечения нет: проверьте HP, лимиты и инвентарь.',**({'keyboard':kb.get_json()} if count else {}));return
         await show(message,await duels.act(message.from_id,message.peer_id,did,rev,action,now))
+
 

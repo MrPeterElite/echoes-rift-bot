@@ -1,1 +1,1 @@
-Накопительное обновление: duel.zip. Инструкция: INSTALL_DUELS.txt.
+Накопительное обновление: quiet.zip. Инструкция: INSTALL_QUIET.txt.
