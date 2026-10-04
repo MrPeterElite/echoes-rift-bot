@@ -1,5 +1,11 @@
 import json
 import random
+import secrets
+import time
+import database as db
+from vkbottle import Keyboard, Text, KeyboardButtonColor
+from systems.vitals import use_health_item
+from systems.item_effects import describe_effect
 from pathlib import Path
 
 
@@ -42,7 +48,7 @@ def format_inventory(character, items, sci_line):
     for index, row in enumerate(items, start=1):
         category, item_name, quantity = row
         text += f"{index}. {item_name} ×{quantity} — {CATEGORIES.get(category, category)}\n"
-    text += "\n/использовать номер\n/уничтожитьпредмет номер количество\n/передатьпредмет ID номер количество"
+    text += "\n/предмет номер — описание и эффекты\n/использовать номер\n/уничтожитьпредмет номер количество\n/передатьпредмет ID номер количество"
     return text
 
 
@@ -64,6 +70,102 @@ def register_inventory_handlers(bot, deps):
     transfer_inventory_item = deps["transfer_inventory_item"]
     sci_line = deps["sci_line"]
     ADMIN_CHAT_ID = deps["ADMIN_CHAT_ID"]
+
+    pending_uses = {}
+
+    async def allowed_location(message, character):
+        if message.peer_id == message.from_id:
+            return True
+        location = await db.get_location_by_peer(message.peer_id)
+        current = await db.get_character_location(character[0])
+        if not location or not current or location[0] != current[0]:
+            await message.answer("Используйте предмет в ЛС или в своей текущей RP-локации.")
+            return False
+        return True
+
+    async def apply_health_item(message, character, item, expected=None):
+        result = await use_health_item(message.from_id, character[0], item, int(time.time()), expected)
+        status = result['status']
+        if status == 'confirm':
+            token = secrets.token_hex(4)
+            pending_uses[message.from_id] = dict(token=token, peer=message.peer_id, cid=character[0],
+                item=item, quote=result['quote'], expires=int(time.time())+60)
+            effect = item['effect']['type']
+            details = (f"Новый запас еды: {result['target']} HP; прирост +{result['gain']}."
+                       if effect=='food_hp' else f"Восстановится только {result['gain']} HP; здоровье станет {result['target']}.")
+            keyboard = (Keyboard(inline=True)
+                        .add(Text("✅ Использовать предмет", payload={"use_token":token}), color=KeyboardButtonColor.POSITIVE)
+                        .row().add(Text("❌ Отменить использование"), color=KeyboardButtonColor.SECONDARY))
+            await message.answer(f"{item['name']}: {details}\nБудет потрачена одна единица. Подтверждение действует минуту.",
+                                 keyboard=keyboard.get_json())
+            return
+        if status != 'ok':
+            errors = {
+                'invalid_character':'Нужна ваша одобренная квента.',
+                'incapacitated':'При 0 HP требуется помощь ведущего; предмет не потрачен.',
+                'in_combat':'Во время сцены нельзя обновлять запас еды.',
+                'not_stronger':'У вас уже есть такой же или больший запас еды. Предмет не потрачен.',
+                'full_hp':'Здоровье полное. Предмет не потрачен.',
+                'limit':'Лимит лечения исчерпан. Предмет не потрачен.',
+                'missing_item':'Предмета уже нет в инвентаре.',
+            }
+            await message.answer(errors.get(status,'Не удалось применить эффект. Предмет не потрачен.'))
+            return
+        after = result['after']
+        rp = random.choice(item.get('messages') or ['{name} использует предмет.']).replace('{name}',character[2])
+        details = (f"🍽 Запас еды: +{after['food_hp']} HP на 30 минут."
+                   if item['effect']['type']=='food_hp' else
+                   f"❤️ +{result['gain']} HP · {result['before']['hp']} → {after['hp']}/{after['max_hp']}")
+        await message.answer(rp+'\n'+details)
+
+    @bot.on.message(text="/предмет <number>")
+    async def inspect_item(message, number=None):
+        character = await get_character_by_user(message.from_id)
+        if not character:
+            await message.answer("Персонаж не найден.")
+            return
+        row = get_item_by_inventory_number(await get_inventory(character[0]),number)
+        if not row:
+            await message.answer("Предмет с таким номером не найден.")
+            return
+        item = find_catalog_item(row[1])
+        if not item:
+            await message.answer(f"{row[1]} ×{row[2]} — описание отсутствует.")
+            return
+        await message.answer(f"{item['name']} ×{row[2]}\n{item.get('description','')}\n\n{describe_effect(item)}")
+
+    @bot.on.message(text="/подтвердитьпредмет <token>")
+    async def confirm_item(message, token=None):
+        pending = pending_uses.get(message.from_id)
+        if not pending or pending['token'] != token or pending['peer'] != message.peer_id:
+            await message.answer("Подтверждение не найдено. Используйте предмет заново.")
+            return
+        pending_uses.pop(message.from_id, None)
+        if pending['expires'] <= int(time.time()):
+            await message.answer("Подтверждение истекло. Используйте предмет заново.")
+            return
+        character = await get_character_by_user(message.from_id)
+        if not character or character[0] != pending['cid']:
+            await message.answer("Персонаж изменился. Использование отменено.")
+            return
+        if await allowed_location(message,character):
+            await apply_health_item(message,character,pending['item'],pending['quote'])
+
+    @bot.on.message(text="✅ Использовать предмет")
+    async def confirm_item_button(message):
+        try:
+            payload = getattr(message, 'payload', None) or {}
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            token = payload.get('use_token') if isinstance(payload, dict) else None
+        except (TypeError, ValueError):
+            token = None
+        await confirm_item(message, token)
+
+    @bot.on.message(text=["/отменитьпредмет", "❌ Отменить использование"])
+    async def cancel_item(message):
+        pending_uses.pop(message.from_id,None)
+        await message.answer("Использование отменено. Предмет не потрачен.")
 
     @bot.on.message(text="/инвентарь")
     async def inventory_handler(message):
@@ -87,6 +189,11 @@ def register_inventory_handlers(bot, deps):
 
         category, item_name, quantity = inv_item
         catalog_item = find_catalog_item(item_name)
+        pending_uses.pop(message.from_id,None)
+        if catalog_item and catalog_item.get('effect',{}).get('type') in ('food_hp','heal'):
+            if await allowed_location(message,character):
+                await apply_health_item(message,character,catalog_item)
+            return
         if catalog_item and not catalog_item.get("usable", False):
             await message.answer("Этот предмет нельзя использовать.")
             return
@@ -106,6 +213,8 @@ def register_inventory_handlers(bot, deps):
             rp_text = random.choice(messages).replace("{name}", character[2])
 
         # В игровой чат отправляется только RP-текст, без фотографии предмета.
+        if catalog_item and catalog_item.get("effect",{}).get("type") == "rp":
+            rp_text += "\n🎭 Только RP: игровые показатели не изменены."
         await message.answer(rp_text)
 
     @bot.on.message(text="/уничтожитьпредмет <number>")

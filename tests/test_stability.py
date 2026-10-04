@@ -1,3 +1,4 @@
+import json
 from contextlib import closing
 import asyncio
 import os
@@ -23,9 +24,11 @@ class Message:
         self.peer_id = uid if peer is None else peer
         self.text = text
         self.answers = []
+        self.keyboards = []
         self.attachments = []
     async def answer(self, text=None, **kwargs):
         self.answers.append(text or kwargs.get('message',''))
+        if 'keyboard' in kwargs:self.keyboards.append(json.loads(kwargs['keyboard']))
 
 class StabilityTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

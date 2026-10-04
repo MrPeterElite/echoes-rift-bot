@@ -79,6 +79,7 @@ from database import (
 
 from systems.characters import register_characters_handlers
 from systems.dispatch import SerialMessageView
+from systems.health_ui import register_health_handlers
 from systems.legacy_admin import build_legacy_admin_router
 from vkbottle.framework.labeler import BotLabeler
 from stability import initialize_database
@@ -168,6 +169,8 @@ main_menu = (
     .row()
     .add(Text("💳 Финансы"), color=KeyboardButtonColor.PRIMARY)
     .add(Text("💡 Связь"), color=KeyboardButtonColor.PRIMARY)
+    .row()
+    .add(Text("❤️ Состояние"), color=KeyboardButtonColor.PRIMARY)
 )
 
 housing_menu = (
@@ -847,6 +850,9 @@ LEGACY_ADMIN_ROUTER = build_legacy_admin_router({
     "update_housing_class": update_housing_class,
     "update_housing_sector": update_housing_sector,
 })
+
+
+register_health_handlers(bot, ADMIN_CHAT_ID)
 
 
 @bot.on.message()

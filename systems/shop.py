@@ -1,4 +1,5 @@
 import json
+from systems.item_effects import describe_effect
 from database import purchase_item
 from pathlib import Path
 
@@ -60,6 +61,7 @@ def format_item(item, index, total, sci_line):
         f"{price_line}"
         f"{extra}\n\n"
         f"{item.get('description', '')}\n\n"
+        f"{describe_effect(item)}\n\n"
         f"Товар {index + 1} из {total}"
     )
 

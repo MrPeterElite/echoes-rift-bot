@@ -1644,7 +1644,7 @@ async def _take_item(db, character_id, name, quantity):
 
 
 async def _delete_character_state(db, cid):
-    for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations'):
+    for table in ('housing_interior_slots', 'housing_interiors', 'housing', 'inventory', 'weekly_quests', 'character_locations', 'character_health'):
         await db.execute(f'DELETE FROM {table} WHERE character_id = ?', (cid,))
     await db.execute('DELETE FROM characters WHERE id = ?', (cid,))
 

@@ -69,7 +69,7 @@ def register_characters_handlers(bot, deps):
         )
 
 
-    @bot.on.message(text="👤 Профиль")
+    @bot.on.message(text=["👤 Профиль", "⬅️ Профиль"])
     async def profile_handler(message):
         await create_user(message.from_id)
 

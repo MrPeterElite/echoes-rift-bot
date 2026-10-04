@@ -7,7 +7,9 @@ from pathlib import Path
 
 import database as db
 
-VERSION = "stability-1"
+from systems.vitals import ensure_health_tables
+
+VERSION = "health-1"
 
 
 def backup_before_migration():
@@ -35,7 +37,7 @@ async def initialize_database():
     for migration in (
         db.create_tables, db.ensure_career_columns, db.ensure_faction_rank_columns,
         db.ensure_quest_tables, db.ensure_housing_tables, db.ensure_location_tables,
-        db.ensure_inventory_tables, db.ensure_core_update_tables, db.ensure_stability_tables,
+        db.ensure_inventory_tables, db.ensure_core_update_tables, db.ensure_stability_tables, ensure_health_tables,
     ):
         await migration()
     async with db._transaction() as connection:
