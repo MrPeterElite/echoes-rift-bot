@@ -688,6 +688,7 @@ ECONOMY_RUNTIME = register_economy_handlers(
 ADMIN_RUNTIME = register_admin_handlers(
     bot,
     {
+        "CHARACTER_RUNTIME": CHARACTER_RUNTIME,
         "Keyboard": Keyboard,
         "KeyboardButtonColor": KeyboardButtonColor,
         "Text": Text,

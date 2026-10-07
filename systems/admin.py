@@ -115,6 +115,8 @@ def register_admin_handlers(bot, deps):
     update_suggestion_status = deps["update_suggestion_status"]
 
     sessions = {}
+    character_runtime = deps['CHARACTER_RUNTIME']
+    character_runtime['admin_archive_open'] = lambda uid: sessions.update({uid: {'mode':'archive'}})
 
     async def admin_role(user_id):
         row = await get_bot_admin(user_id)
@@ -147,6 +149,7 @@ def register_admin_handlers(bot, deps):
             .row()
             .add(Text("🎁 Промокоды"), color=KeyboardButtonColor.PRIMARY)
             .add(Text("💡 Предложения"), color=KeyboardButtonColor.PRIMARY)
+            .row().add(Text("📚 Архив персонажей"), color=KeyboardButtonColor.PRIMARY)
         )
         if ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS["owner"]:
             kb.row().add(Text("👥 Администраторы"), color=KeyboardButtonColor.NEGATIVE)
@@ -278,6 +281,11 @@ def register_admin_handlers(bot, deps):
     @bot.on.message(text="⬅️ Админ-панель")
     async def admin_back_handler(message):
         await show_admin_menu(message)
+
+    @bot.on.message(text='📚 Архив персонажей')
+    async def admin_archive_handler(message):
+        if not await require_admin(message): return
+        await character_runtime['show_archive'](message,0)
 
     @bot.on.message(text="✖️ Закрыть админ-панель")
     async def admin_close_handler(message):
@@ -993,6 +1001,7 @@ def register_admin_handlers(bot, deps):
     # остаются для обычного пути, а этот словарь ловит клики, которые VK/VKBottle
     # не сопоставил с VBMLRule и которые дошли до общего router_handler.
     admin_button_handlers = {
+        normalize_admin_button_text('📚 Архив персонажей'): admin_archive_handler,
         normalize_admin_button_text("⬅️ Админ-панель"): admin_back_handler,
         normalize_admin_button_text("✖️ Закрыть админ-панель"): admin_close_handler,
         normalize_admin_button_text("👤 Управление игроком"): admin_player_start,
@@ -1103,6 +1112,12 @@ def register_admin_handlers(bot, deps):
         if not session:
             return False
         mode = session.get("mode")
+
+        if mode == 'archive':
+            if text.isdigit():
+                await character_runtime['open_admin_archive_character'](message,int(text))
+                return True
+            return False
 
         if mode == "await_character_id":
             try:

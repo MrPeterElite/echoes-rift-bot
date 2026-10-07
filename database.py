@@ -177,12 +177,22 @@ async def get_approved_characters():
     db = await connect()
 
     cursor = await db.execute(
-        "SELECT * FROM characters WHERE status = 'approved' ORDER BY id DESC LIMIT 20"
+        "SELECT * FROM characters WHERE status = 'approved' ORDER BY id DESC"
     )
     characters = await cursor.fetchall()
 
     await db.close()
     return characters
+async def get_character_archive_page(page=0, page_size=10):
+    page_size=max(1,min(int(page_size),10))
+    async with _transaction() as conn:
+        cur=await conn.execute("SELECT COUNT(*) FROM characters WHERE status='approved'")
+        total=(await cur.fetchone())[0]
+        pages=max(1,(total+page_size-1)//page_size)
+        page=max(0,min(int(page),pages-1))
+        cur=await conn.execute("SELECT * FROM characters WHERE status='approved' ORDER BY id DESC LIMIT ? OFFSET ?",(page_size,page*page_size))
+        return await cur.fetchall(),page,pages,total
+
 async def ensure_career_columns():
     db = await connect()
 

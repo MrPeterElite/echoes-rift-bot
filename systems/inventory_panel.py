@@ -92,7 +92,16 @@ async def render(c, view, notice=''):
                 elif catalog.get('effect',{}).get('type') in ('heal','food_hp') or catalog.get('usable',False):
                     button('Использовать', **dict(view, op='preview'))
             else: text += 'Описание отсутствует.'
+        if item and not state['scene_key']:
+            transferable = category in ('armor','weapons') or (find_catalog_item(item['name']) or {}).get('transferable',True)
+            if transferable:
+                if item.get('equipped'): text += '\nДля передачи сначала снимите этот предмет.'
+                else: button('🎁 Передать',screen='transfer_people',back=view)
         button('⬅ Назад', screen='list',category=category,page=view.get('page',0))
+    elif screen.startswith('transfer_'):
+        from systems.inventory_transfer import render_transfer
+        details,transfer_rows=await render_transfer(c,view)
+        text+=details; rows.extend(transfer_rows)
     elif screen == 'confirm':
         text += '\n'+view['details']+'\nБудет использована 1 единица. Подтверждение действует минуту.'
         if view['expires'] > now: button('✅ Подтвердить', **dict(view, op='use'))
@@ -162,9 +171,12 @@ async def use_rp_item(c,item):
             if not ok: return 'Предмета уже нет.'
     return f"{c[2]} использует {item['name']}. Только RP: показатели не изменены."
 
-async def perform(c, action):
+async def perform(c, action, peer=None):
     from systems.inventory import find_catalog_item
     now=int(time.time()); op=action.get('op'); view={k:v for k,v in action.items() if k!='op'}
+    if op=='transfer_commit':
+        from systems.inventory_transfer import transfer
+        return action['back'],await transfer(c[1],c[0],peer,action)
     if op in ('equip','unequip'):
         fn=armor_action if action['category']=='armor' else weapon_action
         result=await fn(c[1],c[0],op,action.get('item_id'))
@@ -211,6 +223,6 @@ async def handle_callback(bot,obj):
                 async with db._transaction() as conn:
                     await conn.execute('DELETE FROM bot_inventory_panels WHERE peer=? AND uid=?',(message.peer_id,message.from_id))
                 return
-            view,notice=await perform(c,action)
+            view,notice=await perform(c,action,message.peer_id)
             await publish(bot,message,c,view,notice,callback=True)
     finally: await message.acknowledge()

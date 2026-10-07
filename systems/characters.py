@@ -1,9 +1,12 @@
 import time
+import json
+from database import get_character_archive_page
 from database import save_character_draft, load_character_draft, delete_character_draft
 from systems.navigation import CHARACTER_MENU
 from systems.onboarding import entry_keyboard
 
 def register_characters_handlers(bot, deps):
+    runtime = {}
     format_status = deps["format_status"]
     format_career = deps["format_career"]
     get_user = deps["get_user"]
@@ -16,7 +19,6 @@ def register_characters_handlers(bot, deps):
     FACTION_DESCRIPTIONS = deps["FACTION_DESCRIPTIONS"]
     reset_user = deps["reset_user"]
     archive_users = deps["archive_users"]
-    get_approved_characters = deps["get_approved_characters"]
     get_vk_name = deps["get_vk_name"]
     done_arts_keyboard = deps["done_arts_keyboard"]
     get_photo_attachment = deps["get_photo_attachment"]
@@ -174,26 +176,49 @@ def register_characters_handlers(bot, deps):
 
     @bot.on.message(text=["📚 Персонажи","📚 Архив квент"])
     async def archive_handler(message):
-        characters = await get_approved_characters()
+        await show_archive_page(message,0)
+
+    @bot.on.message(text=["◀ Персонажи", "Персонажи ▶"])
+    async def archive_page_handler(message):
+        try:
+            payload=message.payload or {}
+            if isinstance(payload,str): payload=json.loads(payload)
+            if not isinstance(payload,dict) or payload.get('archive_owner')!=message.from_id or payload.get('archive_peer')!=message.peer_id:
+                await message.answer('Откройте свой список через «📚 Персонажи».'); return
+            page=payload['archive_page']
+            if type(page) is not int: raise ValueError
+        except (ValueError,TypeError,KeyError):
+            await message.answer('Откройте архив заново через «📚 Персонажи».'); return
+        await show_archive_page(message,page)
+
+    async def show_archive_page(message,page):
+        if message.peer_id == ADMIN_CHAT_ID:
+            from database import get_bot_admin
+            admin = await get_bot_admin(message.from_id)
+            if not admin or not admin[2]:
+                await message.answer('Архив в этой беседе доступен администрации.'); return
+            if runtime.get('admin_archive_open'): runtime['admin_archive_open'](message.from_id)
+        characters,page,pages,total = await get_character_archive_page(page)
 
         if not characters:
             await message.answer(
                 "◢ АРХИВ ПУСТ ◣\n\n"
                 "Пока нет одобренных персонажей.",
-                keyboard=quenta_menu.get_json()
+                keyboard=(Keyboard().add(Text('⬅️ Админ-панель')).get_json() if message.peer_id == ADMIN_CHAT_ID else quenta_menu.get_json())
             )
             return
 
         archive_users.add(message.from_id)
 
-        text = "◢ АРХИВ ПЕРСОНАЖЕЙ ◣\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        text = f"◢ АРХИВ ПЕРСОНАЖЕЙ ◣\nСтраница {page+1}/{pages} · Всего: {total}\n━━━━━━━━━━━━━━━━━━━━\n\n"
 
         for character in characters:
-            player_name = await get_vk_name(character[1])
+            try: player_name = await get_vk_name(character[1])
+            except Exception: player_name = f'VK ID {character[1]}'
             text += (
-                f"#{character[0]} — {character[2]}\n"
-                f"👤 Игрок: {player_name}\n"
-                f"🏛 {character[5]}\n\n"
+                f"#{character[0]} — {character[2][:100]}\n"
+                f"👤 Игрок: {str(player_name)[:80]}\n"
+                f"🏛 {(character[5] or 'Без фракции')[:80]}\n\n"
             )
 
         text += (
@@ -202,7 +227,27 @@ def register_characters_handlers(bot, deps):
             "Например: 1"
         )
 
-        await message.answer(text, keyboard=quenta_menu.get_json())
+        kb=Keyboard(inline=True)
+        if page:
+            kb.add(Text('◀ Персонажи',payload={'archive_owner':message.from_id,'archive_peer':message.peer_id,'archive_page':page-1}))
+        if page+1<pages:
+            kb.add(Text('Персонажи ▶',payload={'archive_owner':message.from_id,'archive_peer':message.peer_id,'archive_page':page+1}))
+        if page or page+1<pages: kb.row()
+        kb.add(Text('⬅️ Админ-панель' if message.peer_id == ADMIN_CHAT_ID else '📜 Управление персонажем'))
+        await message.answer(text, keyboard=kb.get_json())
+
+    async def open_admin_archive_character(message,character_id):
+        from database import get_bot_admin
+        if message.peer_id != ADMIN_CHAT_ID: return
+        admin=await get_bot_admin(message.from_id)
+        if not admin or not admin[2]: return
+        character=await get_character_by_id(character_id)
+        if not character or character[10]!='approved':
+            await message.answer('Этого персонажа нет в открытом архиве.'); return
+        try: player_name=await get_vk_name(character[1])
+        except Exception: player_name=f'VK ID {character[1]}'
+        kb=Keyboard().add(Text('📚 Архив персонажей')).row().add(Text('⬅️ Админ-панель'))
+        await message.answer(f"{format_character(character)}\n\n👤 Игрок: {player_name}\n🔗 https://vk.com/id{character[1]}",attachment=character[9] or None,keyboard=kb.get_json())
 
 
     @bot.on.message(text=[
@@ -405,5 +450,6 @@ def register_characters_handlers(bot, deps):
             )
             return
 
-    return {"handle_message": handle_character_message, "pause_draft": pause_draft, "create":create_form_handler}
+    runtime.update(handle_message=handle_character_message,pause_draft=pause_draft,create=create_form_handler,show_archive=show_archive_page,open_admin_archive_character=open_admin_archive_character)
+    return runtime
 
