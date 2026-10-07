@@ -94,7 +94,7 @@ def register_shop_handlers(bot, deps):
         .add(Text("🛡 Броня"), color=KeyboardButtonColor.PRIMARY)
         .add(Text("🔫 Оружие"), color=KeyboardButtonColor.PRIMARY)
         .row()
-        .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
+        .add(Text("🏠 Главное меню"), color=KeyboardButtonColor.SECONDARY)
     )
 
     def item_keyboard(item=None):
@@ -181,7 +181,7 @@ def register_shop_handlers(bot, deps):
             await message.answer("Персонаж не найден.")
             return True
         if character[10] != "approved":
-            await message.answer("Покупки доступны только после одобрения квенты.")
+            await message.answer("Покупки доступны только после одобрения персонажа.")
             return True
 
         if item.get("category") in {"food", "medicine", "armor", "weapons"}:

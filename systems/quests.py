@@ -77,10 +77,10 @@ def register_quest_handlers(bot, deps):
     async def require_career(message):
         character = await get_character_by_user(message.from_id)
         if not character:
-            await message.answer("Персонаж не найден. Сначала создайте квенту.", keyboard=career_menu.get_json())
+            await message.answer("Персонаж не найден. Сначала создайте персонажа.", keyboard=career_menu.get_json())
             return None
         if character[10] != "approved":
-            await message.answer("Квента должна быть одобрена администрацией.", keyboard=career_menu.get_json())
+            await message.answer("Персонаж должен быть одобрен администрацией.", keyboard=career_menu.get_json())
             return None
         if not character[11] or not character[12] or not (character[13] or 0):
             await message.answer("Сначала администрация должна назначить вам отдел и должность.", keyboard=career_menu.get_json())

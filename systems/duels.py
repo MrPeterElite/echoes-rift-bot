@@ -224,11 +224,8 @@ async def panel(uid, peer, now):
 
 
 async def invite(uid, peer, target, now, battle_chat_peer=None):
-    # None is intentionally a legacy/test fallback. Production passes a configured
-    # BATTLE_CHAT_ID; 0 means it has not been configured and the duel is refused.
-    if battle_chat_peer == 0:
-        return {'text': '⚠️ Боевой чат ещё не настроен администрацией (BATTLE_CHAT_ID).'}
-    target_battle_peer = peer if battle_chat_peer is None else int(battle_chat_peer)
+    # Without a configured arena, the duel stays in its origin RP conversation.
+    target_battle_peer = peer if not battle_chat_peer else int(battle_chat_peer)
 
     async with db._transaction() as conn:
         await expire(conn, now)
@@ -266,7 +263,10 @@ async def act(uid, peer, did, revision, action, now):
         if not d:
             return {'text': 'Дуэль не найдена.'}
         if d['status'] == 'done':
-            return {'text': d['result'] or 'Дуэль уже завершена.'}
+            owner = await one(conn,'SELECT id FROM characters WHERE user_id=? AND id IN (?,?)',(uid,d['a'],d['b']))
+            if not owner or peer not in (origin_peer(d),battle_peer(d)):
+                return {'text':'Эти кнопки доступны только участникам дуэли в её чате.'}
+            return {'text': d['result'] or 'Дуэль уже завершена.','finished':await view(conn,d),'already_finished':True}
 
         expected_peer = origin_peer(d) if d['status'] == 'invite' else battle_peer(d)
         if expected_peer != peer:
@@ -296,7 +296,7 @@ async def act(uid, peer, did, revision, action, now):
         if d['status'] == 'invite':
             if (action == 'decline' and cid == d['b']) or (action == 'cancel' and cid == d['a']):
                 await finish(conn, d, 'Приглашение отклонено или отменено.')
-                return {'text': 'Приглашение закрыто.'}
+                return {'text': 'Приглашение закрыто.','finished':await view(conn,d),'already_finished':True}
             if action != 'accept' or cid != d['b']:
                 return {'text': 'Принять вызов может только приглашённый игрок.'}
             states = [await _state(conn, i, now) for i in (d['a'], d['b'])]

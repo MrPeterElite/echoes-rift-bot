@@ -139,7 +139,7 @@ def register_admin_handlers(bot, deps):
         kb = (
             Keyboard(one_time=False)
             .add(Text("👤 Управление игроком"), color=KeyboardButtonColor.PRIMARY)
-            .add(Text("📜 Квенты на проверке"), color=KeyboardButtonColor.POSITIVE)
+            .add(Text("📜 Персонажи на проверке"), color=KeyboardButtonColor.POSITIVE)
             .row()
             .add(Text("📌 Отчёты на проверке"), color=KeyboardButtonColor.POSITIVE)
             .add(Text("💳 Админ-экономика"), color=KeyboardButtonColor.PRIMARY)
@@ -163,7 +163,7 @@ def register_admin_handlers(bot, deps):
             .add(Text("🔇 Наказания игрока"), color=KeyboardButtonColor.NEGATIVE)
         )
         if ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS["senior"]:
-            kb.add(Text("🗑 Удалить квенту"), color=KeyboardButtonColor.NEGATIVE)
+            kb.add(Text("🗑 Удалить персонажа"), color=KeyboardButtonColor.NEGATIVE)
         return kb.row().add(Text("⬅️ Админ-панель"), color=KeyboardButtonColor.SECONDARY)
 
     def career_keyboard():
@@ -245,7 +245,7 @@ def register_admin_handlers(bot, deps):
             return
         character = await get_character_by_id(character_id)
         if not character:
-            await message.answer("Квента не найдена.")
+            await message.answer("Персонаж не найден.")
             return
         await create_user(character[1])
         user = await get_user(character[1])
@@ -255,7 +255,7 @@ def register_admin_handlers(bot, deps):
         await message.answer(
             "👤 УПРАВЛЕНИЕ ИГРОКОМ\n"
             f"{sci_line()}\n\n"
-            f"🆔 Квента: #{character[0]}\n"
+            f"🆔 Персонаж: #{character[0]}\n"
             f"👤 Персонаж: {character[2]}\n"
             f"📌 Статус: {character[10]}\n"
             f"🏛 Фракция: {character[5]}\n"
@@ -289,7 +289,7 @@ def register_admin_handlers(bot, deps):
         if not await require_admin(message, "admin"):
             return
         sessions[message.from_id] = {"mode": "await_character_id"}
-        await message.answer("Введите ID квенты игрока, которым хотите управлять.")
+        await message.answer("Введите ID персонажа игрока, которым хотите управлять.")
 
     @bot.on.message(text="⬅️ К игроку")
     async def admin_player_back(message):
@@ -553,7 +553,7 @@ def register_admin_handlers(bot, deps):
             await message.answer("У игрока нет активного мута.")
         await show_player(message, cid)
 
-    @bot.on.message(text="🗑 Удалить квенту")
+    @bot.on.message(text="🗑 Удалить персонажа")
     async def delete_quest_button(message):
         if not await require_admin(message, "senior"):
             return
@@ -561,7 +561,7 @@ def register_admin_handlers(bot, deps):
         if not cid:
             return
         sessions[message.from_id]["mode"] = "delete_reason"
-        await message.answer("⚠️ Введите причину удаления квенты. После этого потребуется отдельное подтверждение.")
+        await message.answer("⚠️ Введите причину удаления персонажа. После этого потребуется отдельное подтверждение.")
 
     @bot.on.message(text="✅ ПОДТВЕРДИТЬ УДАЛЕНИЕ")
     async def delete_confirm(message):
@@ -575,18 +575,18 @@ def register_admin_handlers(bot, deps):
             return
         ok, user_id, name = await delete_character_by_admin(cid, reset_account=True)
         if not ok:
-            await message.answer("Квента уже не существует.")
+            await message.answer("Персонаж уже не существует.")
             return
         await log_admin_action(message.from_id, "character_delete", user_id, cid, reason, int(time.time()))
         sessions.pop(message.from_id, None)
         try:
             await bot.api.messages.send(
                 peer_id=user_id, random_id=0,
-                message=f"🗑 Ваша квента #{cid} ({name}) удалена администрацией.\nПричина: {reason}\nБаланс восстановлен до 1500 CR; опыт и уровень сброшены."
+                message=f"🗑 Ваш персонаж #{cid} ({name}) удалён администрацией.\nПричина: {reason}\nБаланс восстановлен до 1500 CR; опыт и уровень сброшены."
             )
         except Exception:
             pass
-        await message.answer(f"🗑 Квента #{cid} удалена. Причина записана в журнал.")
+        await message.answer(f"🗑 Персонаж #{cid} удалён. Причина записана в журнал.")
 
     @bot.on.message(text="❌ ОТМЕНИТЬ УДАЛЕНИЕ")
     async def delete_cancel(message):
@@ -721,7 +721,7 @@ def register_admin_handlers(bot, deps):
             return
         lines = ["💡 НОВЫЕ ПРЕДЛОЖЕНИЯ", sci_line(), ""]
         for row in rows:
-            lines.append(f"#{row[0]} — квента #{row[2] or '—'} — {row[3][:90]}")
+            lines.append(f"#{row[0]} — персонаж #{row[2] or '—'} — {row[3][:90]}")
         lines.append("\nЧтобы открыть: /предложение ID")
         await message.answer("\n".join(lines))
 
@@ -749,7 +749,7 @@ def register_admin_handlers(bot, deps):
         kwargs = {
             "message": (
                 f"💡 ПРЕДЛОЖЕНИЕ #{suggestion[0]}\n{sci_line()}\n\n"
-                f"VK ID: {suggestion[1]}\nКвента: #{suggestion[2] or '—'}\nСтатус: {suggestion[5]}\n\n"
+                f"VK ID: {suggestion[1]}\nПерсонаж: #{suggestion[2] or '—'}\nСтатус: {suggestion[5]}\n\n"
                 f"{suggestion[3]}"
             ),
             "keyboard": kb.get_json(),
@@ -783,7 +783,7 @@ def register_admin_handlers(bot, deps):
         kwargs = {
             "message": (
                 f"💡 ПРЕДЛОЖЕНИЕ #{suggestion[0]}\n{sci_line()}\n\n"
-                f"VK ID: {suggestion[1]}\nКвента: #{suggestion[2] or '—'}\nСтатус: {suggestion[5]}\n\n"
+                f"VK ID: {suggestion[1]}\nПерсонаж: #{suggestion[2] or '—'}\nСтатус: {suggestion[5]}\n\n"
                 f"{suggestion[3]}"
             ),
             "keyboard": kb.get_json(),
@@ -830,18 +830,18 @@ def register_admin_handlers(bot, deps):
         session["mode"] = "suggestion_reply"
         await message.answer("Введите ответ игроку одним сообщением.")
 
-    @bot.on.message(text="📜 Квенты на проверке")
+    @bot.on.message(text="📜 Персонажи на проверке")
     async def pending_characters_handler(message):
         if not await require_admin(message, "moderator"):
             return
         rows = await get_pending_characters(20)
         if not rows:
-            await message.answer("Новых квент на проверке нет.")
+            await message.answer("Новых персонажей на проверке нет.")
             return
-        text = "📜 КВЕНТЫ НА ПРОВЕРКЕ\n" + sci_line() + "\n\n"
+        text = "📜 ПЕРСОНАЖА НА ПРОВЕРКЕ\n" + sci_line() + "\n\n"
         for row in rows:
             text += f"#{row[0]} — {row[2]} — {row[5]}\n"
-        text += "\nОткройте квенту через архив/ID; кнопки одобрения остаются на карточке новой квенты."
+        text += "\nОткройте персонажа через архив/ID; кнопки одобрения остаются на карточке нового персонажа."
         await message.answer(text)
 
     @bot.on.message(text="📌 Отчёты на проверке")
@@ -854,7 +854,7 @@ def register_admin_handlers(bot, deps):
             return
         text = "📌 ОТЧЁТЫ НА ПРОВЕРКЕ\n" + sci_line() + "\n\n"
         for q in rows:
-            text += f"#{q[0]} — квента #{q[1]} — {q[2]}\n"
+            text += f"#{q[0]} — персонаж #{q[1]} — {q[2]}\n"
         text += "\nКоманды /принятьзадание ID и /отклонитьзадание ID сохранены."
         await message.answer(text)
 
@@ -924,7 +924,7 @@ def register_admin_handlers(bot, deps):
             return
         character = await get_character_by_id(character_id)
         if not character:
-            await message.answer("Квента не найдена.")
+            await message.answer("Персонаж не найден.")
             return
         reason = (reason or "").strip()
         if not reason:
@@ -947,7 +947,7 @@ def register_admin_handlers(bot, deps):
             return
         character = await get_character_by_id(character_id)
         if not character:
-            await message.answer("Квента не найдена.")
+            await message.answer("Персонаж не найден.")
             return
         changed = await revoke_mute(character[1], message.from_id, int(time.time()))
         if changed:
@@ -956,18 +956,18 @@ def register_admin_handlers(bot, deps):
         else:
             await message.answer("Активного мута нет.")
 
-    @bot.on.message(text="/удалитьквенту <character_id>")
+    @bot.on.message(text=["/удалитьперсонажа <character_id>", "/удалитьквенту <character_id>"])
     async def delete_character_command(message, character_id=None):
         if not await require_admin(message, "senior"):
             return
         try:
             character_id = int(character_id)
         except (TypeError, ValueError):
-            await message.answer("Использование: /удалитьквенту ID")
+            await message.answer("Использование: /удалитьперсонажа ID")
             return
         character = await get_character_by_id(character_id)
         if not character:
-            await message.answer("Квента не найдена.")
+            await message.answer("Персонаж не найден.")
             return
         sessions[message.from_id] = {"mode": "delete_reason", "character_id": character_id}
         await message.answer(f"⚠️ Подготовлено удаление #{character_id} — {character[2]}.\nВведите причину удаления.")
@@ -1009,7 +1009,7 @@ def register_admin_handlers(bot, deps):
         normalize_admin_button_text("🔇 Наказания игрока"): punishment_player_menu,
         normalize_admin_button_text("🔇 Выдать мут"): mute_button_start,
         normalize_admin_button_text("🔊 Снять мут"): unmute_button,
-        normalize_admin_button_text("🗑 Удалить квенту"): delete_quest_button,
+        normalize_admin_button_text("🗑 Удалить персонажа"): delete_quest_button,
         normalize_admin_button_text("✅ ПОДТВЕРДИТЬ УДАЛЕНИЕ"): delete_confirm,
         normalize_admin_button_text("❌ ОТМЕНИТЬ УДАЛЕНИЕ"): delete_cancel,
         normalize_admin_button_text("🎁 Промокоды"): promo_menu_handler,
@@ -1024,7 +1024,7 @@ def register_admin_handlers(bot, deps):
         normalize_admin_button_text("✅ Отметить рассмотренным"): suggestion_done,
         normalize_admin_button_text("❌ Отклонить предложение"): suggestion_reject,
         normalize_admin_button_text("💬 Ответить игроку"): suggestion_reply_start,
-        normalize_admin_button_text("📜 Квенты на проверке"): pending_characters_handler,
+        normalize_admin_button_text("📜 Персонажи на проверке"): pending_characters_handler,
         normalize_admin_button_text("📌 Отчёты на проверке"): pending_quests_handler,
         normalize_admin_button_text("💳 Админ-экономика"): admin_economy_help,
         normalize_admin_button_text("👥 Администраторы"): admins_list_handler,
@@ -1099,7 +1099,7 @@ def register_admin_handlers(bot, deps):
             try:
                 cid = int(text)
             except ValueError:
-                await message.answer("ID квенты должен быть числом.")
+                await message.answer("ID персонажа должен быть числом.")
                 return True
             await show_player(message, cid)
             return True
@@ -1221,9 +1221,9 @@ def register_admin_handlers(bot, deps):
                 .add(Text("❌ ОТМЕНИТЬ УДАЛЕНИЕ"), color=KeyboardButtonColor.SECONDARY)
             )
             await message.answer(
-                f"⚠️ УДАЛЕНИЕ КВЕНТЫ #{cid}\n{sci_line()}\n\n"
+                f"⚠️ УДАЛЕНИЕ ПЕРСОНАЖА #{cid}\n{sci_line()}\n\n"
                 f"Персонаж: {character[2]}\nПричина: {reason}\n\n"
-                "Будут удалены квента, инвентарь, жильё, задания и местоположение. Баланс будет восстановлен до 1500 CR; XP и уровень будут сброшены.",
+                "Будут удалены персонаж, инвентарь, жильё, задания и местоположение. Баланс будет восстановлен до 1500 CR; XP и уровень будут сброшены.",
                 keyboard=kb.get_json(),
             )
             return True

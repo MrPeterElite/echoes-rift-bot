@@ -44,7 +44,7 @@ async def handle_rp_command(message, bot, deps):
         return True
 
     if character[10] != "approved":
-        await message.answer("RP-команды доступны только после одобрения квенты.")
+        await message.answer("RP-команды доступны только после одобрения персонажа.")
         return True
 
     scene = await duels.refresh_character_scene(character[0], int(time.time()))

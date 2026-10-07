@@ -30,7 +30,7 @@ def register_careers_handlers(bot, deps):
         if not character:
             await message.answer(
                 "◢ КАРЬЕРА НЕ АКТИВНА ◣\n\n"
-                "Сначала создайте квенту и дождитесь одобрения.",
+                "Сначала создайте персонажа и дождитесь одобрения.",
                 keyboard=career_menu.get_json()
             )
             return
@@ -38,7 +38,7 @@ def register_careers_handlers(bot, deps):
         if character[10] != "approved":
             await message.answer(
                 "⏳ КАРЬЕРА ЗАБЛОКИРОВАНА\n\n"
-                "Квента должна быть одобрена администрацией.",
+                "Персонаж должен быть одобрен администрацией.",
                 keyboard=career_menu.get_json()
             )
             return
@@ -63,7 +63,7 @@ def register_careers_handlers(bot, deps):
         if not character:
             await message.answer(
                 "◢ ВЫПЛАТА НЕДОСТУПНА ◣\n\n"
-                "Персонаж не найден. Создайте квенту и дождитесь одобрения.",
+                "Персонаж не найден. Создайте персонажа и дождитесь одобрения.",
                 keyboard=career_menu.get_json()
             )
             return
@@ -71,7 +71,7 @@ def register_careers_handlers(bot, deps):
         if character[10] != "approved":
             await message.answer(
                 "⏳ ВЫПЛАТА ЗАБЛОКИРОВАНА\n\n"
-                "Квента должна быть одобрена администрацией.",
+                "Персонаж должен быть одобрен администрацией.",
                 keyboard=career_menu.get_json()
             )
             return

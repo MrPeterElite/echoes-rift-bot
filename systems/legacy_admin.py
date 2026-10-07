@@ -1,3 +1,4 @@
+from systems.onboarding import entry_keyboard
 def build_legacy_admin_router(deps):
     ADMIN_CHAT_ID = deps["ADMIN_CHAT_ID"]
     ADMIN_RUNTIME = deps["ADMIN_RUNTIME"]
@@ -58,7 +59,7 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(parts[1])
                 except ValueError:
-                    await message.answer("Неверный ID квенты.")
+                    await message.answer("Неверный ID персонажа.")
                     return True
 
                 department_key = parts[2].lower()
@@ -80,7 +81,7 @@ def build_legacy_admin_router(deps):
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 department = DEPARTMENTS[department_key]
@@ -113,7 +114,7 @@ def build_legacy_admin_router(deps):
                 await message.answer(
                     "🟢 НАЗНАЧЕНИЕ ВЫПОЛНЕНО\n"
                     f"{sci_line()}\n\n"
-                    f"🆔 Квента: #{character_id}\n"
+                    f"🆔 Персонаж: #{character_id}\n"
                     f"📂 Отдел: {department_name}\n"
                     f"💼 Должность: {job_title}\n"
                     f"💳 Зарплата: {salary} CR"
@@ -135,13 +136,13 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(parts[1])
                 except ValueError:
-                    await message.answer("Неверный ID квенты.")
+                    await message.answer("Неверный ID персонажа.")
                     return True
 
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 department_name = character[11]
@@ -194,7 +195,7 @@ def build_legacy_admin_router(deps):
                 await message.answer(
                     "🟢 ПОВЫШЕНИЕ ВЫПОЛНЕНО\n"
                     f"{sci_line()}\n\n"
-                    f"🆔 Квента: #{character_id}\n"
+                    f"🆔 Персонаж: #{character_id}\n"
                     f"📂 Отдел: {department_name}\n"
                     f"💼 Новая должность: {new_job_title}\n"
                     f"💳 Зарплата: {salary} CR"
@@ -216,13 +217,13 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(parts[1])
                 except ValueError:
-                    await message.answer("Неверный ID квенты.")
+                    await message.answer("Неверный ID персонажа.")
                     return True
 
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 department_name = character[11]
@@ -271,7 +272,7 @@ def build_legacy_admin_router(deps):
                 await message.answer(
                     "🟠 ПОНИЖЕНИЕ ВЫПОЛНЕНО\n"
                     f"{sci_line()}\n\n"
-                    f"🆔 Квента: #{character_id}\n"
+                    f"🆔 Персонаж: #{character_id}\n"
                     f"📂 Отдел: {department_name}\n"
                     f"💼 Новая должность: {new_job_title}\n"
                     f"💳 Зарплата: {salary} CR"
@@ -288,7 +289,7 @@ def build_legacy_admin_router(deps):
                     return True
                 character = await get_character_by_id(character_id)
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
                 ranks = FACTION_RANKS.get(character[5])
                 current_level = character[16] if len(character) > 16 and character[16] else 0
@@ -310,7 +311,7 @@ def build_legacy_admin_router(deps):
                     return True
                 character = await get_character_by_id(character_id)
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
                 ranks = FACTION_RANKS.get(character[5])
                 current_level = character[16] if len(character) > 16 and character[16] else 0
@@ -339,7 +340,7 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(parts[1])
                 except ValueError:
-                    await message.answer("Неверный ID квенты.")
+                    await message.answer("Неверный ID персонажа.")
                     return True
 
                 housing_class = parts[2].upper()
@@ -352,7 +353,7 @@ def build_legacy_admin_router(deps):
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 current_housing = await get_housing(character_id)
@@ -387,7 +388,7 @@ def build_legacy_admin_router(deps):
                 await message.answer(
                     "🟢 КАЮТА ВЫДАНА\n"
                     f"{sci_line()}\n\n"
-                    f"🆔 Квента: #{character_id}\n"
+                    f"🆔 Персонаж: #{character_id}\n"
                     f"🏠 Тип: {HOUSING_NAMES[housing_class]}\n"
                     f"📍 Сектор: {sector}\n"
                     f"💳 Аренда: {HOUSING_PRICES[housing_class]} CR / неделя"
@@ -404,13 +405,13 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(parts[1])
                 except ValueError:
-                    await message.answer("Неверный ID квенты.")
+                    await message.answer("Неверный ID персонажа.")
                     return True
 
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 returned_sets = await remove_housing(character_id)
@@ -427,7 +428,7 @@ def build_legacy_admin_router(deps):
                 )
 
                 await message.answer(
-                    f"🏠 Каюта квенты #{character_id} изъята. "
+                    f"🏠 Каюта персонажа #{character_id} изъята. "
                     f"В инвентарь возвращено комплектов: {returned_sets}."
                 )
                 return True
@@ -442,14 +443,14 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(parts[1])
                 except ValueError:
-                    await message.answer("Неверный ID квенты.")
+                    await message.answer("Неверный ID персонажа.")
                     return True
 
                 character = await get_character_by_id(character_id)
                 housing = await get_housing(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 if not housing:
@@ -470,7 +471,7 @@ def build_legacy_admin_router(deps):
                     )
                 )
 
-                await message.answer(f"📍 Квента #{character_id} переселена в сектор {sector}.")
+                await message.answer(f"📍 Персонаж #{character_id} переселён в сектор {sector}.")
                 return True
 
             if text.startswith("/улучшитькаюту "):
@@ -488,7 +489,7 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(parts[1])
                 except ValueError:
-                    await message.answer("Неверный ID квенты.")
+                    await message.answer("Неверный ID персонажа.")
                     return True
 
                 housing_class = parts[2].upper()
@@ -501,7 +502,7 @@ def build_legacy_admin_router(deps):
                 housing = await get_housing(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 if not housing:
@@ -535,7 +536,7 @@ def build_legacy_admin_router(deps):
                 )
 
                 await message.answer(
-                    f"⬆️ Квента #{character_id}: жильё изменено на {HOUSING_NAMES[housing_class]}."
+                    f"⬆️ Персонаж #{character_id}: жильё изменено на {HOUSING_NAMES[housing_class]}."
                 )
                 return True
 
@@ -561,7 +562,7 @@ def build_legacy_admin_router(deps):
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 await create_user(character[1])
@@ -570,7 +571,7 @@ def build_legacy_admin_router(deps):
                 await message.answer(
                     "◢ ПРОВЕРКА БАЛАНСА ◣\n"
                     f"{sci_line()}\n\n"
-                    f"🆔 Квента: #{character_id}\n"
+                    f"🆔 Персонаж: #{character_id}\n"
                     f"👤 Персонаж: {character[2]}\n"
                     f"💳 Баланс: {user[1]} CR"
                 )
@@ -590,13 +591,13 @@ def build_legacy_admin_router(deps):
                 try:
                     character_id = int(text.split("#")[-1].strip())
                 except ValueError:
-                    await message.answer("Неверный номер квенты.")
+                    await message.answer("Неверный номер персонажа.")
                     return True
 
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 await update_character_status(character_id, "approved")
@@ -604,28 +605,29 @@ def build_legacy_admin_router(deps):
                 await bot.api.messages.send(
                     peer_id=character[1],
                     random_id=0,
+                    keyboard=await entry_keyboard(character[1]),
                     message=(
                         "🟢 ВЕРИФИКАЦИЯ ЗАВЕРШЕНА\n"
                         f"{sci_line()}\n\n"
-                        "Ваша квента одобрена.\n"
+                        "Ваш персонаж одобрен.\n"
                         "Доступ к системе Echoes of the Rift открыт."
                     )
                 )
 
-                await message.answer(f"✅ Квента #{character_id} одобрена.")
+                await message.answer(f"✅ Персонаж #{character_id} одобрен.")
                 return True
 
             if "Отклонить #" in text:
                 try:
                     character_id = int(text.split("#")[-1].strip())
                 except ValueError:
-                    await message.answer("Неверный номер квенты.")
+                    await message.answer("Неверный номер персонажа.")
                     return True
 
                 character = await get_character_by_id(character_id)
 
                 if not character:
-                    await message.answer("Квента не найдена.")
+                    await message.answer("Персонаж не найден.")
                     return True
 
                 await update_character_status(character_id, "rejected")
@@ -633,15 +635,16 @@ def build_legacy_admin_router(deps):
                 await bot.api.messages.send(
                     peer_id=character[1],
                     random_id=0,
+                    keyboard=await entry_keyboard(character[1]),
                     message=(
-                        "🔴 КВЕНТА ОТКЛОНЕНА\n"
+                        "🔴 ПЕРСОНАЖ ОТКЛОНЁН\n"
                         f"{sci_line()}\n\n"
-                        "Администрация отклонила вашу квенту.\n"
+                        "Администрация отклонила вашего персонажа.\n"
                         "Вы можете удалить персонажа и создать нового."
                     )
                 )
 
-                await message.answer(f"❌ Квента #{character_id} отклонена.")
+                await message.answer(f"❌ Персонаж #{character_id} отклонён.")
                 return True
 
             return True

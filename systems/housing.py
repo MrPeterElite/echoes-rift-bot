@@ -173,7 +173,7 @@ def register_housing_handlers(bot, deps):
         .add(Text("📡 Показать каюту"), color=KeyboardButtonColor.POSITIVE)
         .row()
         .add(Text("🏠 Моя каюта"), color=KeyboardButtonColor.PRIMARY)
-        .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
+        .add(Text("🏠 Главное меню"), color=KeyboardButtonColor.SECONDARY)
     )
 
     async def get_owner_context(message):
@@ -182,7 +182,7 @@ def register_housing_handlers(bot, deps):
             await message.answer("Персонаж не найден.", keyboard=housing_menu.get_json())
             return None
         if character[10] != "approved":
-            await message.answer("Интерьер доступен после одобрения квенты.", keyboard=housing_menu.get_json())
+            await message.answer("Интерьер доступен после одобрения персонажа.", keyboard=housing_menu.get_json())
             return None
         housing = await get_housing(character[0])
         if not housing:

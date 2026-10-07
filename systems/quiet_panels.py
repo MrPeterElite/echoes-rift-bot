@@ -4,6 +4,7 @@ import json
 import logging
 from functools import wraps
 import database as db
+from systems.duel_callbacks import callback_keyboard
 
 EMPTY_KEYBOARD=json.dumps({'inline':True,'buttons':[]})
 log=logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class PanelMessage:
                     await conn.commit()
         finally:await conn.close()
         message_text=text or kwargs.pop('message',None) or 'Откройте /дуель.'
-        keyboard=kwargs.get('keyboard',EMPTY_KEYBOARD)
+        keyboard=callback_keyboard(kwargs.get('keyboard',EMPTY_KEYBOARD))
         if row:
             try:
                 edited=await self.bot.api.messages.edit(peer_id=self.peer_id,cmid=row[0],message=message_text,keyboard=keyboard)
@@ -50,6 +51,8 @@ class PanelMessage:
                 return None
             except Exception as exc:
                 log.warning('Cannot edit bot duel panel in peer %s: %s',self.peer_id,type(exc).__name__)
+                if getattr(self.original,'is_duel_callback',False):
+                    await self.original.notice('Не удалось обновить панель. Введите /дуель, чтобы восстановить её.');return
         sent=await self.original.answer(message_text,**dict(kwargs,keyboard=keyboard))
         error=sent.get('error') if isinstance(sent,dict) else getattr(sent,'error',None)
         if error:return sent

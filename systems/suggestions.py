@@ -23,7 +23,7 @@ def register_suggestion_handlers(bot, deps):
         .add(Text("💡 Предложить идею"), color=KeyboardButtonColor.POSITIVE)
         .add(Text("📋 Мои предложения"), color=KeyboardButtonColor.PRIMARY)
         .row()
-        .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
+        .add(Text("🏠 Главное меню"), color=KeyboardButtonColor.SECONDARY)
     )
 
     @bot.on.message(text="💡 Связь")
@@ -104,7 +104,7 @@ def register_suggestion_handlers(bot, deps):
             "message": (
                 f"💡 НОВОЕ ПРЕДЛОЖЕНИЕ #{suggestion_id}\n{sci_line()}\n\n"
                 f"VK ID: {message.from_id}\n"
-                f"Квента: #{character_id or '—'}\n\n"
+                f"Персонаж: #{character_id or '—'}\n\n"
                 f"{text[:3000]}\n\n"
                 f"/предложение {suggestion_id}"
             ),

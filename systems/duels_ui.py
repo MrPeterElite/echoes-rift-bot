@@ -7,6 +7,7 @@ import database as db
 from systems import duels
 from systems.vitals import get_health
 from systems.quiet_panels import quiet_handlers
+from systems.duel_callbacks import register_callbacks
 
 
 def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
@@ -77,6 +78,8 @@ def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
 
     async def show(message, result):
         text = result.get('text', '')
+        if getattr(message,'is_duel_callback',False) and not any(k in result for k in ('duel','targets','finished')):
+            await message.notice(text or 'Откройте панель дуэли.');return
         kb = Keyboard(inline=True)
         d = result.get('duel')
 
@@ -147,6 +150,10 @@ def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
             **({'keyboard': json.dumps(data, ensure_ascii=False)} if data['buttons'] else {}),
         )
 
+    async def tell(message,text):
+        if getattr(message,'is_duel_callback',False):await message.notice(text)
+        else:await message.answer(text)
+
     @bot.on.message(text='/дуель')
     @quiet
     async def duel_panel(message):
@@ -187,7 +194,7 @@ def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
                 return
             did, rev, action = int(payload['duel']), int(payload['rev']), payload['action']
         except (ValueError, TypeError, KeyError):
-            await message.answer('Нажмите актуальную кнопку из /дуель.')
+            await tell(message,'Нажмите актуальную кнопку из /дуель.')
             return
 
         if action in ('medmenu', 'surrender_menu'):
@@ -198,7 +205,7 @@ def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
                 not d or d['id'] != did or d['revision'] != rev
                 or d['battle_peer'] != message.peer_id or d['status'] != 'active'
             ):
-                await message.answer('Панель устарела. Откройте /дуель в боевой беседе.')
+                await tell(message,'Панель устарела. Откройте /дуель.')
                 return
             kb = Keyboard(inline=True)
             if action == 'surrender_menu':
@@ -209,13 +216,14 @@ def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
                     ),
                     color=KeyboardButtonColor.NEGATIVE,
                 )
+                kb.row().add(Text('↩ К бою',payload={'action':'panel'}))
                 await message.answer(
                     'Сдаться и признать победу соперника? HP и износ сохранятся.',
                     keyboard=kb.get_json(),
                 )
                 return
             if d['actor'] != cid or d['phase'] != 'turn':
-                await message.answer('Лечение доступно вместо атаки в свой ход.')
+                await tell(message,'Лечение доступно вместо атаки в свой ход.')
                 return
             from systems.inventory import find_catalog_item
             s = await get_health(cid, now)
@@ -241,6 +249,9 @@ def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
                     payload={'duel': did, 'rev': rev, 'action': 'heal:' + item['code']},
                 ))
                 count += 1
+            if not count:
+                await tell(message,'Доступного лечения нет: проверьте HP, лимиты и инвентарь.');return
+            kb.row().add(Text('↩ К бою',payload={'action':'panel'}))
             await message.answer(
                 'Нажатие потратит один предмет и ваш ход. /дуель — вернуться.'
                 if count else 'Доступного лечения нет: проверьте HP, лимиты и инвентарь.',
@@ -263,9 +274,10 @@ def register_duel_handlers(bot, battle_chat_id=None, battle_chat_link=''):
             return
 
         await show(message, result)
-        if result.get('finished'):
+        if result.get('finished') and not result.get('already_finished') and duels.origin_peer(result['finished']) != duels.battle_peer(result['finished']):
             await notify_origin_finished(result['finished'], result.get('text', 'Дуэль завершена.'))
 
+    register_callbacks(bot,duel_panel,duel_button)
     return {
         'battle_chat_id': battle_chat_id,
         'battle_chat_link': battle_chat_link,

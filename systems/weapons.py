@@ -34,7 +34,7 @@ async def weapon_action(uid,cid,action,weapon_id=None,target_id=None):
         await duels.refresh_character_scene(target_id, int(time.time()))
     async with db._transaction() as conn:
         cursor=await conn.execute("SELECT 1 FROM characters WHERE id=? AND user_id=? AND status='approved'",(cid,uid))
-        if not await cursor.fetchone():return {'status':'error','text':'Нужна ваша одобренная квента.'}
+        if not await cursor.fetchone():return {'status':'error','text':'Нужен ваш одобренный персонаж.'}
         cursor=await conn.execute('SELECT scene_key FROM character_health WHERE character_id=?',(cid,))
         state=await cursor.fetchone()
         if state and state[0]:return {'status':'error','text':'Выбор, снятие и передача оружия доступны только вне боя.'}

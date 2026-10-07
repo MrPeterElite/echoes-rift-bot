@@ -11,7 +11,7 @@ def register_factions_handlers(bot, deps):
             "◢ ФРАКЦИОННЫЙ РЕЕСТР ◣\n"
             f"{sci_line()}\n\n"
             "Доступные организации мира Echoes of the Rift.\n"
-            "Фракция выбирается при создании квенты.",
+            "Фракция выбирается при создании персонажа.",
             keyboard=main_menu.get_json()
         )
 

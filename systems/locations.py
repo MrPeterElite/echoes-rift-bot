@@ -1,5 +1,7 @@
 import time
 from systems import duels
+import database as db
+from systems.location_browser import register_location_browser
 
 def register_locations_handlers(bot, deps):
     get_location_by_peer = deps["get_location_by_peer"]
@@ -9,7 +11,7 @@ def register_locations_handlers(bot, deps):
     get_character_by_user = deps["get_character_by_user"]
     get_character_location = deps["get_character_location"]
     get_location_by_code = deps["get_location_by_code"]
-    set_character_location = deps["set_character_location"]
+    browse_locations = register_location_browser(bot)
     delete_message_from_chat = deps["delete_message_from_chat"]
 
     async def send_private(user_id: int, text: str):
@@ -25,6 +27,8 @@ def register_locations_handlers(bot, deps):
 
     @bot.on.message(text="/локации")
     async def locations_list_handler(message):
+        if message.peer_id==message.from_id:
+            await browse_locations(message);return
         locations = await get_all_locations()
         text = "◢ ЛОКАЦИИ СТАНЦИИ ◣\n"
         text += f"{sci_line()}\n\n"
@@ -119,7 +123,7 @@ def register_locations_handlers(bot, deps):
             return
 
         if character[10] != "approved":
-            await message.answer("Переходы доступны только после одобрения квенты.")
+            await message.answer("Переходы доступны только после одобрения персонажа.")
             return
 
         scene = await duels.refresh_character_scene(character[0], int(time.time()))
@@ -159,7 +163,9 @@ def register_locations_handlers(bot, deps):
                 await message.answer(text)
             return
 
-        await set_character_location(character[0], target[0])
+        ok,reason=await db.move_character_if_idle(message.from_id,character[0],target[0],int(time.time()))
+        if not ok:
+            await message.answer('⛔ Нельзя покинуть локацию во время активной дуэли или сцены.' if reason=='in_combat' else 'Перемещение не выполнено. Обновите список локаций.');return
 
         # Если переход написан прямо в локационном чате, убираем техническую
         # команду из RP-ленты. Пользователь при этом НЕ исключается из беседы.

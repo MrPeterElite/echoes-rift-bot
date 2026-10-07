@@ -24,7 +24,7 @@ def register_economy_handlers(bot, deps):
         .add(Text("🎁 Промокод"), color=KeyboardButtonColor.PRIMARY)
         .add(Text("🏆 Богачи"), color=KeyboardButtonColor.SECONDARY)
         .row()
-        .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
+        .add(Text("🏠 Главное меню"), color=KeyboardButtonColor.SECONDARY)
     )
 
     confirm_transfer_menu = (
@@ -45,7 +45,7 @@ def register_economy_handlers(bot, deps):
             await message.answer("Персонаж не найден.")
             return None
         if character[10] != "approved":
-            await message.answer("Финансовые операции доступны после одобрения квенты.")
+            await message.answer("Финансовые операции доступны после одобрения персонажа.")
             return None
         await create_user(message.from_id)
         return character
@@ -89,7 +89,7 @@ def register_economy_handlers(bot, deps):
         if not sender_character:
             return False
         if not receiver_character or receiver_character[10] != "approved":
-            await message.answer("Получатель должен иметь одобренную квенту.")
+            await message.answer("Получатель должен иметь одобренного персонажа.")
             return False
         if receiver_character[1] == message.from_id:
             await message.answer("Нельзя перевести кредиты самому себе.")
@@ -146,7 +146,7 @@ def register_economy_handlers(bot, deps):
                 "limit": "Лимит активаций этого промокода исчерпан.",
                 "already_used": "Вы уже активировали этот промокод.",
                 "no_rewards": "Промокод настроен некорректно: награды отсутствуют.",
-                "character_invalid": "Для активации нужна ваша действующая одобренная квента.",
+                "character_invalid": "Для активации нужен ваш одобренный персонаж.",
                 "in_combat": "Промокод содержит боевые предметы. Активируйте его после завершения боевой сцены.",
             }
             await message.answer("❌ " + errors.get(result, "Промокод не активирован."), keyboard=finance_menu.get_json())
@@ -185,7 +185,7 @@ def register_economy_handlers(bot, deps):
         if not await require_character(message):
             return
         sessions[message.from_id] = {"mode": "transfer_target"}
-        await message.answer("Введите ID квенты получателя.")
+        await message.answer("Введите ID персонажа получателя.")
 
     @bot.on.message(text="✅ Подтвердить перевод")
     async def transfer_confirm_button(message):
@@ -251,11 +251,11 @@ def register_economy_handlers(bot, deps):
             try:
                 target_id = int(text)
             except ValueError:
-                await message.answer("ID квенты должен быть числом.")
+                await message.answer("ID персонажа должен быть числом.")
                 return True
             receiver = await get_character_by_id(target_id)
             if not receiver or receiver[10] != "approved":
-                await message.answer("Одобренная квента с таким ID не найдена.")
+                await message.answer("Одобренный персонаж с таким ID не найден.")
                 return True
             if receiver[1] == message.from_id:
                 await message.answer("Нельзя переводить деньги самому себе.")

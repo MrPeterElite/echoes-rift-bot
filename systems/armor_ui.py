@@ -12,7 +12,7 @@ def register_armor_handlers(bot):
     async def context(message):
         character = await db.get_character_by_user(message.from_id)
         if not character or character[10]!='approved':
-            await message.answer('Нужна одобренная квента.')
+            await message.answer('Нужен одобренный персонаж.')
             return None
         if message.peer_id!=message.from_id:
             location = await db.get_location_by_peer(message.peer_id)

@@ -90,6 +90,8 @@ from stability import initialize_database
 from systems.careers import register_careers_handlers
 from systems.economy import register_economy_handlers
 from systems.locations import register_locations_handlers
+from systems.navigation import MAIN_MENU,register_navigation
+from systems.onboarding import install_onboarding,entry_keyboard
 from systems.housing import (
     register_housing_handlers,
     handle_housing_command,
@@ -158,30 +160,19 @@ if not BOT_OWNER_ID:
 _battle_raw = (os.getenv("BATTLE_CHAT_ID") or "").strip()
 BATTLE_CHAT_ID = int(_battle_raw) if _battle_raw.lstrip("-").isdigit() else 0
 BATTLE_CHAT_LINK = (os.getenv("BATTLE_CHAT_LINK") or "").strip()
+# RP chat is the default until an explicit switch to a dedicated arena.
+if os.getenv('DUEL_IN_RP_CHAT','1').strip() != '0':
+    BATTLE_CHAT_ID = 0
+    BATTLE_CHAT_LINK = ''
 if not BATTLE_CHAT_ID:
-    print("[config] WARNING: BATTLE_CHAT_ID is not configured; new duel invitations will be disabled.")
+    print("[config] Duels run in their origin RP chat.")
 
 bot = Bot(token=TOKEN, labeler=BotLabeler(message_view=SerialMessageView()))
 
 archive_users = set()
 
 
-main_menu = (
-    Keyboard(one_time=False)
-    .add(Text("👤 Профиль"), color=KeyboardButtonColor.PRIMARY)
-    .add(Text("📜 Квенты"), color=KeyboardButtonColor.POSITIVE)
-    .row()
-    .add(Text("💼 Карьера"), color=KeyboardButtonColor.SECONDARY)
-    .add(Text("🏛 Фракции"), color=KeyboardButtonColor.SECONDARY)
-    .row()
-    .add(Text("🏠 Каюта"), color=KeyboardButtonColor.POSITIVE)
-    .add(Text("🛒 Магазин"), color=KeyboardButtonColor.POSITIVE)
-    .row()
-    .add(Text("💳 Финансы"), color=KeyboardButtonColor.PRIMARY)
-    .add(Text("💡 Связь"), color=KeyboardButtonColor.PRIMARY)
-    .row()
-    .add(Text("❤️ Состояние"), color=KeyboardButtonColor.PRIMARY)
-)
+main_menu = MAIN_MENU
 
 housing_menu = (
     Keyboard(one_time=False)
@@ -190,17 +181,17 @@ housing_menu = (
     .row()
     .add(Text("💳 Оплатить аренду"), color=KeyboardButtonColor.POSITIVE)
     .row()
-    .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
+    .add(Text("🏠 Главное меню"), color=KeyboardButtonColor.SECONDARY)
 )
 
 
 quenta_menu = (
     Keyboard(one_time=False)
-    .add(Text("📜 Создать квенту"), color=KeyboardButtonColor.POSITIVE)
-    .add(Text("📚 Архив квент"), color=KeyboardButtonColor.PRIMARY)
+    .add(Text("👤 Создать персонажа"), color=KeyboardButtonColor.POSITIVE)
+    .add(Text("📚 Персонажи"), color=KeyboardButtonColor.PRIMARY)
     .row()
     .add(Text("🗑 Удалить персонажа"), color=KeyboardButtonColor.NEGATIVE)
-    .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
+    .add(Text("🏠 Главное меню"), color=KeyboardButtonColor.SECONDARY)
 )
 
 career_menu = (
@@ -211,7 +202,7 @@ career_menu = (
     .add(Text("📌 Задание"), color=KeyboardButtonColor.PRIMARY)
     .add(Text("📨 Сдать отчёт"), color=KeyboardButtonColor.POSITIVE)
     .row()
-    .add(Text("⬅️ Назад"), color=KeyboardButtonColor.SECONDARY)
+    .add(Text("🏠 Главное меню"), color=KeyboardButtonColor.SECONDARY)
 )
 
 faction_keyboard = (
@@ -563,7 +554,7 @@ def format_character(character):
         f"◢ ECHOES OF THE RIFT [TRP] ◣\n"
         f"{sci_line()}\n"
         f"📡 ДОСЬЕ ПЕРСОНАЖА\n\n"
-        f"🆔 Квента: #{character[0]}\n"
+        f"🆔 Персонаж: #{character[0]}\n"
         f"👤 Имя: {character[2]}\n"
         f"🎂 Возраст: {character[3]}\n"
         f"⚧ Пол: {character[4]}\n"
@@ -611,11 +602,11 @@ async def start_handler(message: Message):
         "Терминал синхронизирован.\n"
         "Доступ к основному интерфейсу открыт.\n\n"
         "Выберите раздел управления.",
-        keyboard=main_menu.get_json()
+        keyboard=await entry_keyboard(message.from_id)
     )
 
 
-@bot.on.message(text="⬅️ Назад")
+@bot.on.message(text=["⬅️ Назад","🏠 Главное меню"])
 async def back_handler(message: Message):
     await CHARACTER_RUNTIME["pause_draft"](message)
     for runtime_name in ("ECONOMY_RUNTIME", "SUGGESTION_RUNTIME"):
@@ -625,7 +616,7 @@ async def back_handler(message: Message):
     await message.answer(
         "◢ ГЛАВНЫЙ ТЕРМИНАЛ ◣\n\n"
         "Вы вернулись в основной интерфейс.",
-        keyboard=main_menu.get_json()
+        keyboard=await entry_keyboard(message.from_id)
     )
 
 
@@ -877,6 +868,13 @@ LEGACY_ADMIN_ROUTER = build_legacy_admin_router({
 })
 
 
+def clear_navigation_sessions(uid):
+    for runtime in (ECONOMY_RUNTIME,SUGGESTION_RUNTIME):
+        runtime.get('sessions',{}).pop(uid,None)
+
+from systems.ui_labels import UI_LABELS
+ONBOARDING_GATE=install_onboarding(bot,ADMIN_CHAT_ID,CHARACTER_RUNTIME,set(FACTION_DESCRIPTIONS),UI_LABELS)
+register_navigation(bot,CHARACTER_RUNTIME['pause_draft'],clear_navigation_sessions)
 register_duel_handlers(bot, BATTLE_CHAT_ID, BATTLE_CHAT_LINK)
 register_health_handlers(bot, ADMIN_CHAT_ID)
 register_armor_handlers(bot)
@@ -958,7 +956,7 @@ async def router_handler(message: Message):
         player_name = await get_vk_name(character[1])
         vk_link = f"https://vk.com/id{character[1]}"
         # Для архива используем вложения ровно в том виде, в котором они
-        # были сохранены при создании квенты. Старые пользовательские photo-ID
+        # были сохранены при создании персонажа. Старые пользовательские photo-ID
         # VK умеет прикреплять напрямую, а попытка повторно искать/перезаливать
         # их через media-слой может надолго блокировать открытие анкеты.
         arts = character[9] if character[9] else None

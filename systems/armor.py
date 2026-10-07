@@ -39,7 +39,7 @@ async def armor_action(uid, cid, action, armor_id=None, target_id=None, expected
     async with db._transaction() as conn:
         cursor = await conn.execute("SELECT 1 FROM characters WHERE id=? AND user_id=? AND status='approved'",(cid,uid))
         if not await cursor.fetchone():
-            return {'status':'error','text':'Нужна ваша одобренная квента.'}
+            return {'status':'error','text':'Нужен ваш одобренный персонаж.'}
         await conn.execute('INSERT OR IGNORE INTO character_health(character_id) VALUES (?)',(cid,))
         cursor = await conn.execute('SELECT scene_key FROM character_health WHERE character_id=?',(cid,))
         if (await cursor.fetchone())[0]:

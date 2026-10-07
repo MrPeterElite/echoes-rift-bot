@@ -1,8 +1,10 @@
 import time
 from database import save_character_draft, load_character_draft, delete_character_draft
+from systems.navigation import CHARACTER_MENU
+from systems.onboarding import entry_keyboard
+
 def register_characters_handlers(bot, deps):
     format_status = deps["format_status"]
-    main_menu = deps["main_menu"]
     format_career = deps["format_career"]
     get_user = deps["get_user"]
     create_user = deps["create_user"]
@@ -58,12 +60,12 @@ def register_characters_handlers(bot, deps):
             draft['active'] = False
             await save_character_draft(message.from_id, draft)
 
-    @bot.on.message(text="📜 Квенты")
+    @bot.on.message(text=["📜 Управление персонажем","📜 Квенты"])
     async def quenta_menu_handler(message):
         await message.answer(
             "◢ АРХИВНЫЙ ТЕРМИНАЛ ◣\n"
             f"{sci_line()}\n\n"
-            "📜 Здесь можно создать, удалить или просмотреть квенты.\n\n"
+            "📜 Здесь можно создать, удалить или просмотреть персонажа.\n\n"
             "Выберите действие.",
             keyboard=quenta_menu.get_json()
         )
@@ -81,8 +83,8 @@ def register_characters_handlers(bot, deps):
                 "◢ ПРОФИЛЬ НЕ АКТИВИРОВАН ◣\n"
                 f"{sci_line()}\n\n"
                 "Персонаж не найден.\n"
-                "Создайте квенту для допуска к системе.",
-                keyboard=main_menu.get_json()
+                "Создайте персонажа для допуска к системе.",
+                keyboard=CHARACTER_MENU.get_json()
             )
             return
 
@@ -100,7 +102,7 @@ def register_characters_handlers(bot, deps):
             f"⭐ Опыт: {user[2]}\n"
             f"📈 Уровень: {user[3]}\n\n"
             f"{sci_line()}",
-            keyboard=main_menu.get_json()
+            keyboard=CHARACTER_MENU.get_json()
         )
 
 
@@ -110,7 +112,7 @@ def register_characters_handlers(bot, deps):
 
 
 
-    @bot.on.message(text="📜 Создать квенту")
+    @bot.on.message(text=["👤 Создать персонажа","✏️ Продолжить создание","📜 Создать квенту"])
     async def create_form_handler(message):
         if not await require_private(message):
             return
@@ -119,7 +121,7 @@ def register_characters_handlers(bot, deps):
         if old_character:
             await message.answer(
                 "⚠️ ДОСЬЕ УЖЕ СУЩЕСТВУЕТ\n\n"
-                "Чтобы создать новую квенту, сначала удалите текущего персонажа.",
+                "Чтобы создать нового персонажа, сначала удалите текущего персонажа.",
                 keyboard=quenta_menu.get_json()
             )
             return
@@ -146,7 +148,7 @@ def register_characters_handlers(bot, deps):
                     .row().add(Text("↩ Отменить удаление персонажа"), color=KeyboardButtonColor.SECONDARY))
         await message.answer(
             f"Удалить персонажа #{character[0]} — {character[2]}?\n"
-            "Квента, вещи, жильё, задания и опыт будут удалены. Баланс вернётся к 1500 CR. "
+            "Персонаж, вещи, жильё, задания и опыт будут удалены. Баланс вернётся к 1500 CR. "
             "Подтверждение действует 5 минут.",
             keyboard=keyboard.get_json())
 
@@ -156,35 +158,35 @@ def register_characters_handlers(bot, deps):
             return
         request = deletion_requests.pop(message.from_id, None)
         if not request or time.monotonic() > request[1]:
-            await message.answer("Подтверждение устарело. Откройте удаление персонажа заново.", keyboard=quenta_menu.get_json())
+            await message.answer("Подтверждение устарело. Откройте удаление персонажа заново.", keyboard=await entry_keyboard(message.from_id))
             return
         if not await reset_user(message.from_id, expected_character_id=request[0]):
-            await message.answer("Персонаж уже изменился. Удаление отменено.", keyboard=quenta_menu.get_json())
+            await message.answer("Персонаж уже изменился. Удаление отменено.", keyboard=await entry_keyboard(message.from_id))
             return
         archive_users.discard(message.from_id)
-        await message.answer("Персонаж удалён. Баланс восстановлен до 1500 CR, опыт сброшен. Можно создать новую квенту.", keyboard=quenta_menu.get_json())
+        await message.answer("Персонаж удалён. Баланс восстановлен до 1500 CR, опыт сброшен. Можно создать нового персонажа.", keyboard=await entry_keyboard(message.from_id))
 
     @bot.on.message(text="↩ Отменить удаление персонажа")
     async def cancel_delete_character(message):
         deletion_requests.pop(message.from_id, None)
-        await message.answer("Удаление отменено.", keyboard=quenta_menu.get_json())
+        await message.answer("Удаление отменено.", keyboard=await entry_keyboard(message.from_id))
 
 
-    @bot.on.message(text="📚 Архив квент")
+    @bot.on.message(text=["📚 Персонажи","📚 Архив квент"])
     async def archive_handler(message):
         characters = await get_approved_characters()
 
         if not characters:
             await message.answer(
                 "◢ АРХИВ ПУСТ ◣\n\n"
-                "Пока нет одобренных квент.",
+                "Пока нет одобренных персонажей.",
                 keyboard=quenta_menu.get_json()
             )
             return
 
         archive_users.add(message.from_id)
 
-        text = "◢ АРХИВ КВЕНТ ◣\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        text = "◢ АРХИВ ПЕРСОНАЖЕЙ ◣\n━━━━━━━━━━━━━━━━━━━━\n\n"
 
         for character in characters:
             player_name = await get_vk_name(character[1])
@@ -196,7 +198,7 @@ def register_characters_handlers(bot, deps):
 
         text += (
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "Чтобы открыть квенту, напишите её номер.\n"
+            "Чтобы открыть персонажа, напишите его номер.\n"
             "Например: 1"
         )
 
@@ -250,9 +252,9 @@ def register_characters_handlers(bot, deps):
         await delete_character_draft(message.from_id)
 
         await message.answer(
-            "🔄 СОЗДАНИЕ КВЕНТЫ СБРОШЕНО\n\n"
-            "Нажмите «📜 Создать квенту», чтобы начать заново.",
-            keyboard=quenta_menu.get_json()
+            "🔄 СОЗДАНИЕ ПЕРСОНАЖА СБРОШЕНО\n\n"
+            "Нажмите «👤 Создать персонажа», чтобы начать заново.",
+            keyboard=await entry_keyboard(message.from_id)
         )
 
 
@@ -292,7 +294,7 @@ def register_characters_handlers(bot, deps):
                 peer_id=ADMIN_CHAT_ID,
                 random_id=0,
                 message=(
-                    "📡 НОВАЯ КВЕНТА ОБНАРУЖЕНА\n"
+                    "📡 НОВЫЙ ПЕРСОНАЖ НА ПРОВЕРКЕ\n"
                     f"{sci_line()}\n\n"
                     f"{format_character(character)}\n\n"
                     f"👤 Игрок: {player_name}\n"
@@ -303,17 +305,17 @@ def register_characters_handlers(bot, deps):
             )
         except Exception:
             # The saved quenta is still visible in /админ -> pending characters.
-            await message.answer("Квента сохранена. Уведомление администрации не доставлено; она доступна в очереди проверки.")
+            await message.answer("Персонаж сохранён. Уведомление администрации не доставлено; он доступен в очереди проверки.")
 
 
         await delete_character_draft(message.from_id)
 
         await message.answer(
-            "⏳ КВЕНТА ОТПРАВЛЕНА НА ВЕРИФИКАЦИЮ\n"
+            "⏳ ПЕРСОНАЖ ОТПРАВЛЕН НА ВЕРИФИКАЦИЮ\n"
             f"{sci_line()}\n\n"
             "Ожидайте решения администрации.\n"
             "До одобрения персонаж неактивен.",
-            keyboard=quenta_menu.get_json()
+            keyboard=await entry_keyboard(message.from_id)
         )
 
 
@@ -389,7 +391,7 @@ def register_characters_handlers(bot, deps):
             if len(draft["arts"]) >= 3:
                 await message.answer(
                     "Лимит — 3 арта.\n"
-                    "Нажмите «✅ Готово», чтобы отправить квенту."
+                    "Нажмите «✅ Готово», чтобы отправить персонажа."
                 )
                 return
     
@@ -403,4 +405,5 @@ def register_characters_handlers(bot, deps):
             )
             return
 
-    return {"handle_message": handle_character_message, "pause_draft": pause_draft}
+    return {"handle_message": handle_character_message, "pause_draft": pause_draft, "create":create_form_handler}
+

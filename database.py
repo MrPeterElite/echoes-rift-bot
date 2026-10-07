@@ -839,6 +839,21 @@ async def set_character_location(character_id, location_code):
     await db.close()
 
 
+async def move_character_if_idle(uid, cid, code, now):
+    from systems.duels import expire
+    async with _transaction() as conn:
+        await expire(conn, now)
+        cursor=await conn.execute("SELECT 1 FROM characters WHERE id=? AND user_id=? AND status='approved'",(cid,uid))
+        if not await cursor.fetchone():return False,'character_invalid'
+        cursor=await conn.execute('SELECT 1 FROM locations WHERE code=?',(code,))
+        if not await cursor.fetchone():return False,'not_found'
+        cursor=await conn.execute('SELECT scene_key FROM character_health WHERE character_id=?',(cid,))
+        state=await cursor.fetchone()
+        if state and state[0]:return False,'in_combat'
+        await conn.execute('INSERT INTO character_locations(character_id,location_code) VALUES (?,?) ON CONFLICT(character_id) DO UPDATE SET location_code=excluded.location_code',(cid,code))
+        return True,'ok'
+
+
 async def transfer_balance(from_user_id, to_user_id, amount):
     """Атомарный перевод CR между VK-пользователями."""
     try:

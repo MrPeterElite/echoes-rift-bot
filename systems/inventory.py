@@ -105,7 +105,7 @@ def register_inventory_handlers(bot, deps):
         if status != 'ok':
             errors = {
                 'duel_only':'В дуэли используйте кнопку лечения в /дуель: лечение расходует ход.',
-                'invalid_character':'Нужна ваша одобренная квента.',
+                'invalid_character':'Нужен ваш одобренный персонаж.',
                 'incapacitated':'При 0 HP требуется помощь ведущего; предмет не потрачен.',
                 'in_combat':'Во время сцены нельзя обновлять запас еды.',
                 'not_stronger':'У вас уже есть такой же или больший запас еды. Предмет не потрачен.',
@@ -171,7 +171,7 @@ def register_inventory_handlers(bot, deps):
         pending_uses.pop(message.from_id,None)
         await message.answer("Использование отменено. Предмет не потрачен.")
 
-    @bot.on.message(text="/инвентарь")
+    @bot.on.message(text=["/инвентарь","🎒 Инвентарь"])
     async def inventory_handler(message):
         character = await get_character_by_user(message.from_id)
         if not character:
@@ -272,7 +272,7 @@ def register_inventory_handlers(bot, deps):
             return
         receiver = await get_character_by_id(character_id)
         if not receiver:
-            await message.answer("Квента получателя не найдена.")
+            await message.answer("Персонаж получателя не найден.")
             return
         inv_item = get_item_by_inventory_number(await get_inventory(sender[0]), number)
         if not inv_item:
@@ -312,6 +312,6 @@ def register_inventory_handlers(bot, deps):
             return
         character = await get_character_by_id(character_id)
         if not character:
-            await message.answer("Квента не найдена.")
+            await message.answer("Персонаж не найден.")
             return
         await message.answer(format_inventory(character, await get_inventory(character_id), sci_line))
