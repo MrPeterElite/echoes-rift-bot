@@ -2,6 +2,7 @@ from database import adjust_balance_by_admin
 import time
 
 from systems.shop import load_shop_items
+from systems.admin_progress import install_progress
 
 
 ROLE_LEVELS = {
@@ -161,9 +162,10 @@ def register_admin_handlers(bot, deps):
             .add(Text("🏠 Жильё игрока"), color=KeyboardButtonColor.POSITIVE)
             .row()
             .add(Text("🔇 Наказания игрока"), color=KeyboardButtonColor.NEGATIVE)
+            .add(Text("⭐ Опыт игрока"), color=KeyboardButtonColor.PRIMARY)
         )
         if ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS["senior"]:
-            kb.add(Text("🗑 Удалить персонажа"), color=KeyboardButtonColor.NEGATIVE)
+            kb.row().add(Text("🗑 Удалить персонажа"), color=KeyboardButtonColor.NEGATIVE)
         return kb.row().add(Text("⬅️ Админ-панель"), color=KeyboardButtonColor.SECONDARY)
 
     def career_keyboard():
@@ -400,10 +402,12 @@ def register_admin_handlers(bot, deps):
         if not character:
             await message.answer("Сначала выберите игрока.")
             return
+        sessions[message.from_id] = {"mode": "player", "character_id": cid}
         kb = (
             Keyboard(one_time=False)
             .add(Text("⬆️ Повысить ранг"), color=KeyboardButtonColor.POSITIVE)
             .add(Text("⬇️ Понизить ранг"), color=KeyboardButtonColor.NEGATIVE)
+            .row().add(Text("🔄 Изменить фракцию"), color=KeyboardButtonColor.PRIMARY)
             .row().add(Text("⬅️ К игроку"), color=KeyboardButtonColor.SECONDARY)
         )
         await message.answer(
@@ -983,6 +987,8 @@ def register_admin_handlers(bot, deps):
             text = text.split("]", 1)[1].strip()
         return " ".join(text.split())
 
+    handle_progress = install_progress(bot, deps, sessions, require_admin, show_player)
+
     # Резервный роутинг админ-кнопок. Точные @bot.on.message(text=...)
     # остаются для обычного пути, а этот словарь ловит клики, которые VK/VKBottle
     # не сопоставил с VBMLRule и которые дошли до общего router_handler.
@@ -1088,6 +1094,9 @@ def register_admin_handlers(bot, deps):
             except (IndexError, ValueError):
                 return False
             await suggestion_open_button(message, suggestion_id)
+            return True
+
+        if await handle_progress(message):
             return True
 
         session = sessions.get(message.from_id)

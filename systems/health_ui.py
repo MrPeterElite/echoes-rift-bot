@@ -29,6 +29,10 @@ def format_health(character, state, now):
 def register_health_handlers(bot, admin_chat):
     @bot.on.message(text=['/состояние','❤️ Состояние'])
     async def health_card(message):
+        if message.peer_id >= 2000000000:
+            from systems.inventory_panel import open_panel
+            await open_panel(bot,message,'state')
+            return
         character = await db.get_character_by_user(message.from_id)
         if not character or character[10] != 'approved':
             await message.answer('Состояние доступно после одобрения персонажа.')

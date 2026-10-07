@@ -44,6 +44,11 @@ def register_callbacks(bot,panel_handler,button_handler):
     @bot.on.raw_event('message_event',dict)
     async def duel_callback(event):
         obj=event.get('object') or {};payload=obj.get('payload')
+        if isinstance(payload,dict) and payload.get('inventory_ui')==1:
+            if type(obj.get('user_id')) is int and type(obj.get('peer_id')) is int and obj.get('event_id'):
+                from systems.inventory_panel import handle_callback
+                await handle_callback(bot,obj)
+            return
         if not isinstance(payload,dict) or payload.get('duel_ui')!=1:return
         if not isinstance(obj.get('user_id'),int) or not isinstance(obj.get('peer_id'),int) or not obj.get('event_id'):return
         message=CallbackMessage(bot,obj)

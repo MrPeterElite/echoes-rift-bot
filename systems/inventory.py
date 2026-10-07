@@ -173,6 +173,10 @@ def register_inventory_handlers(bot, deps):
 
     @bot.on.message(text=["/инвентарь","🎒 Инвентарь"])
     async def inventory_handler(message):
+        if message.peer_id >= 2000000000:
+            from systems.inventory_panel import open_panel
+            await open_panel(bot,message)
+            return
         character = await get_character_by_user(message.from_id)
         if not character:
             await message.answer("Персонаж не найден.")

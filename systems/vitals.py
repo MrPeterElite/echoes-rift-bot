@@ -54,7 +54,7 @@ async def get_health(cid, now):
         return await _state(conn, cid, now)
 
 
-async def use_health_item(uid, cid, item, now, expected=None):
+async def use_health_item(uid, cid, item, now, expected=None, preview=False):
     """Quote partial/replacement use, then revalidate the exact quote on confirmation."""
     from systems import duels
     await duels.refresh_character_scene(cid, now)
@@ -96,7 +96,7 @@ async def use_health_item(uid, cid, item, now, expected=None):
             needs_confirmation = gain < amount
         # Expiry is fixed in the state; wall clock is deliberately not part of the quote.
         quote = (cid, item['code'], kind, amount, gain, tuple(state.items()))
-        if (needs_confirmation and expected != quote) or (expected is not None and expected != quote):
+        if preview or (needs_confirmation and expected != quote) or (expected is not None and expected != quote):
             return {'status':'confirm', 'quote':quote, 'gain':gain, 'target':amount if kind=='food_hp' else state['hp']+gain}
         ok, reason = await db._take_item(conn, cid, item['name'], 1)
         if not ok:
